@@ -2,11 +2,27 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 /**
+ * A length near `seconds` holding a whole number of cycles (within 1/1000 of
+ * one), so the looped file has no click at the seam.
+ */
+function loopLength(frequency: number, seconds: number, rate: number): number {
+	const start = Math.round(seconds * rate);
+	let best = start;
+	let bestError = 1;
+	for (let n = start; n < start * 1.5 && bestError > 1e-3; n++) {
+		const cycles = (frequency * n) / rate;
+		const error = Math.abs(cycles - Math.round(cycles));
+		if (error < bestError) [best, bestError] = [n, error];
+	}
+	return best;
+}
+
+/**
  * Writes a mono 16-bit PCM WAV of a harmonic tone, used as Chrome's fake
  * microphone (`--use-file-for-fake-audio-capture`, which loops the file).
  */
 export function writeToneWav(path: string, frequency: number, seconds = 2, rate = 48_000) {
-	const n = Math.round(seconds * rate);
+	const n = loopLength(frequency, seconds, rate);
 	const data = Buffer.alloc(n * 2);
 	const harmonics = [0.3, 0.15, 0.08];
 	for (let i = 0; i < n; i++) {

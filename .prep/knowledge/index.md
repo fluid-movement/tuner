@@ -10,6 +10,7 @@ okf_version: "0.2"
 
 ## Directories
 
-* [components](/components/index.md) - 2 entries
+* [components](/components/index.md) - 3 entries
 * [conventions](/conventions/index.md) - 1 entry
+* [features](/features/index.md) - 1 entry
 * [pitfalls](/pitfalls/index.md) - 1 entry

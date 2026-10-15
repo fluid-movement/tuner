@@ -10,6 +10,6 @@ tags:
 priority: high
 ---
 
-Iteration 1 milestone: show detected note, nearest target string for the chosen instrument, and cents deviation with an in-tune indicator and smoothing. Instrument selected manually (guitar/ukulele) for now.
+Iteration 1 milestone: a usable single-string tuner. Show the detected note, the nearest target string of the chosen instrument, and the deviation in cents on a meter, with an in-tune indicator and smoothing so the display is steady while a string rings. The instrument (guitar or ukulele, standard tuning) is selected manually and remembered. Works on phone and desktop screens.
 
 ## Open questions

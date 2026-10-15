@@ -6,6 +6,21 @@ import processorUrl from './tuner-processor.ts?worker&url';
 import { PROCESSOR_NAME, type ProcessorMessage, type ProcessorOptions } from './messages.ts';
 import { TUNER_WASM_PATH, type PitchReading } from '../wasm/tuner.ts';
 
+let bytes: Promise<ArrayBuffer> | undefined;
+
+/**
+ * Fetches tuner.wasm once. Callers get a copy, because posting the bytes to
+ * the worklet may transfer (detach) the buffer.
+ */
+export async function loadTunerBytes(): Promise<ArrayBuffer> {
+	bytes ??= fetch(asset(TUNER_WASM_PATH)).then((r) => {
+		if (!r.ok) throw new Error(`Failed to load ${TUNER_WASM_PATH}: ${r.status}`);
+		return r.arrayBuffer();
+	});
+	bytes.catch(() => (bytes = undefined));
+	return (await bytes).slice(0);
+}
+
 /** Samples between analyses: about 21 ms at 48 kHz. */
 const HOP = 1024;
 
@@ -29,10 +44,7 @@ export async function startTuner(events: TunerEngineEvents): Promise<TunerEngine
 	const context = new AudioContext({ latencyHint: 'interactive' });
 	let stream: MediaStream | undefined;
 	try {
-		const wasm = fetch(asset(TUNER_WASM_PATH)).then((r) => {
-			if (!r.ok) throw new Error(`Failed to load ${TUNER_WASM_PATH}: ${r.status}`);
-			return r.arrayBuffer();
-		});
+		const wasm = loadTunerBytes();
 		stream = await navigator.mediaDevices.getUserMedia({
 			audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
 		});

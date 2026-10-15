@@ -1,1 +1,6 @@
 - [ ] Real-instrument check (deferred from pitch detection 01M509SBE2JC07NJX9MBS21FMP): every string of a real acoustic guitar and ukulele reads the right string and settles in tune against a reference tuner
+- [x] Selecting guitar or ukulele shows that instrument's strings; the choice survives a reload
+- [x] Playwright with a fake-mic E2 (82.41 Hz) on guitar highlights string E2 and shows in tune; a 10-cent-flat A2 shows flat and not in tune; a C4 on ukulele highlights C4
+- [x] Smoother and in-tune rule are unit-tested: outlier rejection, reset on jump, timeout, hysteresis
+- [x] The layout works at 375 px width without horizontal scrolling
+- [x] cargo test, cargo clippy, pnpm test, pnpm check, pnpm lint, pnpm build and pnpm test:e2e pass

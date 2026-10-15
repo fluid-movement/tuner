@@ -4,6 +4,11 @@ export interface TunerExports {
 	tuner_version(): number;
 	tuner_note_midi(frequency: number): number;
 	tuner_note_cents(frequency: number): number;
+	tuner_string_count(instrument: number): number;
+	tuner_string_midi(instrument: number, index: number): number;
+	tuner_string_frequency(instrument: number, index: number): number;
+	tuner_nearest_string(instrument: number, frequency: number): number;
+	tuner_cents_between(frequency: number, reference: number): number;
 	tuner_new(sampleRate: number): number;
 	tuner_free(handle: number): void;
 	tuner_frame_size(handle: number): number;
@@ -66,6 +71,63 @@ export class WasmPitchDetector {
 	free(): void {
 		this.#exports.tuner_free(this.#handle);
 		this.#handle = 0;
+	}
+}
+
+export type Instrument = 'guitar' | 'ukulele';
+export const INSTRUMENTS: readonly Instrument[] = ['guitar', 'ukulele'];
+/** Ids used by the tuner-wasm tuning exports. */
+const INSTRUMENT_IDS: Record<Instrument, number> = { guitar: 0, ukulele: 1 };
+
+export interface TunerString {
+	/** Position in string order (for ukulele, 0 is the re-entrant G4). */
+	index: number;
+	midi: number;
+	/** Note name with octave, such as `"E2"`. */
+	name: string;
+	frequency: number;
+}
+
+/** Standard tunings and nearest-string lookup, from tuner-core via WASM. */
+export class Tunings {
+	readonly #exports: TunerExports;
+	readonly #cache = new Map<Instrument, TunerString[]>();
+
+	constructor(exports: TunerExports) {
+		this.#exports = exports;
+	}
+
+	strings(instrument: Instrument): TunerString[] {
+		let strings = this.#cache.get(instrument);
+		if (!strings) {
+			const e = this.#exports;
+			const id = INSTRUMENT_IDS[instrument];
+			strings = Array.from({ length: e.tuner_string_count(id) }, (_, index) => {
+				const midi = e.tuner_string_midi(id, index);
+				return {
+					index,
+					midi,
+					name: noteName(midi),
+					frequency: e.tuner_string_frequency(id, index)
+				};
+			});
+			this.#cache.set(instrument, strings);
+		}
+		return strings;
+	}
+
+	/** The string nearest to `frequency` and the offset from it in cents. */
+	nearest(instrument: Instrument, frequency: number): { string: TunerString; cents: number } {
+		const e = this.#exports;
+		const string =
+			this.strings(instrument)[e.tuner_nearest_string(INSTRUMENT_IDS[instrument], frequency)];
+		return { string, cents: e.tuner_cents_between(frequency, string.frequency) };
+	}
+
+	/** Note nearest to `frequency`. */
+	note(frequency: number): { midi: number; name: string; cents: number } {
+		const midi = this.#exports.tuner_note_midi(frequency);
+		return { midi, name: noteName(midi), cents: this.#exports.tuner_note_cents(frequency) };
 	}
 }
 

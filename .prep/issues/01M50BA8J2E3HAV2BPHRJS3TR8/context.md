@@ -1,0 +1,1 @@
+Root justfile. dev/build depend on setup, which is idempotent (rustup target add, pnpm install --frozen-lockfile). The wasm build already runs as pnpm pre-scripts; recipes call pnpm scripts rather than duplicating commands. Document in README; mention in /conventions/build-and-tooling.md when that entry is written (foundations doc issue).

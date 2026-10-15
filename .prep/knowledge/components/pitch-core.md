@@ -9,6 +9,7 @@ generated:
 scope:
   - crates/tuner-core/src/pitch.rs
   - crates/tuner-core/tests
+confirmed_commit: e7dc5754fa285b7054afb660c6a8f6499b76642c
 ---
 
 `crates/tuner-core/src/pitch.rs` detects the pitch of one monophonic frame. Pure Rust, no dependencies; the WASM wrapper lives in `crates/tuner-wasm`.

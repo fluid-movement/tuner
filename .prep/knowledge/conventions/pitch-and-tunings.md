@@ -8,6 +8,7 @@ generated:
   at: 2026-10-15T17:42:57Z
 scope:
   - crates/tuner-core/src/tuning.rs
+confirmed_commit: e7dc5754fa285b7054afb660c6a8f6499b76642c
 ---
 
 `crates/tuner-core/src/tuning.rs` holds everything about notes and tunings.

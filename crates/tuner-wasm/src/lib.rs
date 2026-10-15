@@ -7,7 +7,8 @@
 //! linear memory, call `tuner_detect(handle)`, and if it returns 1 read
 //! `tuner_frequency(handle)` and `tuner_clarity(handle)`.
 
-use tuner_core::{Note, PitchConfig, PitchDetector, PitchEstimate};
+use tuner_core::tuning::cents_between;
+use tuner_core::{Instrument, Note, PitchConfig, PitchDetector, PitchEstimate};
 
 /// Detector state behind a handle owned by JS.
 pub struct Tuner {
@@ -32,6 +33,50 @@ pub extern "C" fn tuner_note_midi(frequency: f32) -> i32 {
 #[unsafe(no_mangle)]
 pub extern "C" fn tuner_note_cents(frequency: f32) -> f32 {
     Note::from_frequency(frequency).cents
+}
+
+/// Instrument ids used by the tuning exports: 0 is guitar, 1 is ukulele.
+fn instrument(id: u32) -> Option<Instrument> {
+    match id {
+        0 => Some(Instrument::Guitar),
+        1 => Some(Instrument::Ukulele),
+        _ => None,
+    }
+}
+
+/// Number of strings of instrument `id` in standard tuning (0 if unknown).
+#[unsafe(no_mangle)]
+pub extern "C" fn tuner_string_count(id: u32) -> u32 {
+    instrument(id).map_or(0, |i| i.strings().len() as u32)
+}
+
+/// MIDI number of string `index` of instrument `id`, or -1 if out of range.
+#[unsafe(no_mangle)]
+pub extern "C" fn tuner_string_midi(id: u32, index: u32) -> i32 {
+    string(id, index).map_or(-1, |s| s.midi)
+}
+
+/// Target frequency in Hz of string `index` of instrument `id`, or 0.
+#[unsafe(no_mangle)]
+pub extern "C" fn tuner_string_frequency(id: u32, index: u32) -> f32 {
+    string(id, index).map_or(0.0, |s| s.frequency)
+}
+
+fn string(id: u32, index: u32) -> Option<&'static tuner_core::StringTarget> {
+    instrument(id)?.strings().get(index as usize)
+}
+
+/// Index of the string of instrument `id` nearest to `frequency` (by pitch),
+/// or -1 if the instrument is unknown.
+#[unsafe(no_mangle)]
+pub extern "C" fn tuner_nearest_string(id: u32, frequency: f32) -> i32 {
+    instrument(id).map_or(-1, |i| i.nearest_string(frequency).0 as i32)
+}
+
+/// Distance from `reference` to `frequency` in cents (positive is sharp).
+#[unsafe(no_mangle)]
+pub extern "C" fn tuner_cents_between(frequency: f32, reference: f32) -> f32 {
+    cents_between(frequency, reference)
 }
 
 /// Creates a detector with the default configuration for `sample_rate`.
@@ -124,6 +169,21 @@ mod tests {
         assert_eq!(tuner_note_midi(440.0), 69);
         assert_eq!(tuner_note_midi(82.41), 40);
         assert!((tuner_note_cents(446.0) - 23.45).abs() < 0.05);
+    }
+
+    #[test]
+    fn exposes_tunings() {
+        assert_eq!(tuner_string_count(0), 6);
+        assert_eq!(tuner_string_count(1), 4);
+        assert_eq!(tuner_string_count(2), 0);
+        assert_eq!(tuner_string_midi(0, 0), 40);
+        assert_eq!(tuner_string_midi(1, 0), 67);
+        assert_eq!(tuner_string_midi(1, 4), -1);
+        assert!((tuner_string_frequency(0, 1) - 110.0).abs() < 1e-4);
+        assert_eq!(tuner_nearest_string(0, 84.0), 0);
+        assert_eq!(tuner_nearest_string(1, 262.0), 1);
+        assert_eq!(tuner_nearest_string(9, 262.0), -1);
+        assert!((tuner_cents_between(880.0, 440.0) - 1200.0).abs() < 0.01);
     }
 
     #[test]

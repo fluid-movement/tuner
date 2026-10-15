@@ -9,6 +9,7 @@ generated:
 scope:
   - crates/tuner-wasm
   - web/src/lib/audio
+confirmed_commit: e7dc5754fa285b7054afb660c6a8f6499b76642c
 ---
 
 Running WASM on the audio thread has constraints that are easy to trip over.

@@ -1,0 +1,3 @@
+- [x] just dev starts the dev server from a clean checkout (setup runs automatically)
+- [x] just check runs cargo test, clippy, fmt check, pnpm test, check, lint, build and e2e, and passes
+- [x] just --list documents every recipe; README shows the 1–2 command quickstart
