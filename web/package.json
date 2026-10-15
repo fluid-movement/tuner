@@ -17,10 +17,12 @@
 		"predev": "pnpm build:wasm",
 		"prebuild": "pnpm build:wasm",
 		"pretest": "pnpm build:wasm",
-		"test:watch": "vitest"
+		"test:watch": "vitest",
+		"test:e2e": "playwright test"
 	},
 	"devDependencies": {
 		"@eslint/js": "^10.0.1",
+		"@playwright/test": "1.64.1",
 		"@sveltejs/adapter-static": "^4.0.0",
 		"@sveltejs/kit": "^3.0.0",
 		"@sveltejs/vite-plugin-svelte": "^7.2.0",

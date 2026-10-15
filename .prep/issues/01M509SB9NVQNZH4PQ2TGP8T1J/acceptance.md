@@ -1,0 +1,5 @@
+- [x] tuner-wasm exports create/input pointer/detect/frequency/clarity/free and Rust tests exercise them natively
+- [x] Vitest: the frame accumulator emits 2048-sample frames every 1024 samples in order, and the built wasm detects a 110 Hz tone written into its input buffer
+- [x] Playwright in Chrome with a fake microphone playing a generated 110 Hz (A2) tone shows about 110 Hz / A2 on the page after pressing Start
+- [x] Audio starts only after a user gesture; denied microphone permission shows an error message
+- [x] cargo test, cargo clippy, pnpm test, pnpm check, pnpm lint and pnpm build pass

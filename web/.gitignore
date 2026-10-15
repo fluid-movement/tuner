@@ -24,3 +24,7 @@ vite.config.ts.timestamp-*
 
 # Built by pnpm build:wasm
 /static/wasm/
+
+# Playwright
+/test-results/
+/playwright-report/

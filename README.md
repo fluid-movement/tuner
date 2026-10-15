@@ -15,4 +15,5 @@ pnpm install
 pnpm dev     # builds the wasm, then starts Vite
 pnpm build   # static site in web/build
 pnpm test && pnpm check && pnpm lint
+pnpm test:e2e  # Playwright in installed Chrome with a fake mic
 ```
