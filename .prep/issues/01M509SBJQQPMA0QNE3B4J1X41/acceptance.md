@@ -1,0 +1,1 @@
+- [ ] Real-instrument check (deferred from pitch detection 01M509SBE2JC07NJX9MBS21FMP): every string of a real acoustic guitar and ukulele reads the right string and settles in tune against a reference tuner

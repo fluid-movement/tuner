@@ -12,7 +12,7 @@ A browser-based tuner for stringed instruments, mainly acoustic guitar and ukule
 
 ## Architecture
 
-- `crates/tuner-core`: pure Rust DSP with no web dependencies, tested natively with synthetic signals.
+- `crates/tuner-core`: pure Rust DSP with no web dependencies, tested natively with synthetic signals. See [Pitch core](/components/pitch-core.md) and [Pitch, notes and tunings](/conventions/pitch-and-tunings.md).
 - `crates/tuner-wasm`: thin WASM wrapper around the core.
 - `web/`: SvelteKit 3 app (Vite, static adapter, pnpm), shipped as an installable offline PWA.
 

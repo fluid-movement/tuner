@@ -1,0 +1,6 @@
+- [x] PitchDetector detects pure sines at every guitar and ukulele standard-tuning string within ±1 cent at 44.1 and 48 kHz
+- [x] Harmonic-rich tones with a weak fundamental are detected at the fundamental (no octave error)
+- [x] Note mapping and nearest_string return correct note names, octaves and cents for both instruments
+- [x] detect performs no heap allocation after construction
+- [x] cargo test and cargo clippy pass with no warnings
+- [x] With about 30 dB SNR noise every string is detected within ±1 cent; with 10 dB SNR single frames are within ±6 cents and the mean over 20 frames within ±1 cent; silence and pure noise return None

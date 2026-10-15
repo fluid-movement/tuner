@@ -1,0 +1,1 @@
+- 2026-10-15T17:43:24Z claude-code/opus-5.5: /components/pitch-core.md and /conventions/pitch-and-tunings.md written as drafts with issue 01M509SBE2JC07NJX9MBS21FMP; audio-pipeline and audioworklet-wasm entries remain

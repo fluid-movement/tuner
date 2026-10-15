@@ -7,3 +7,8 @@ okf_version: "0.2"
 ## Entries
 
 * [Tuner](/overview.md) - Browser tuner for acoustic guitar and ukulele: Rust/WASM pitch core in an AudioWorklet, SvelteKit 3 PWA
+
+## Directories
+
+* [components](/components/index.md) - 1 entry
+* [conventions](/conventions/index.md) - 1 entry
