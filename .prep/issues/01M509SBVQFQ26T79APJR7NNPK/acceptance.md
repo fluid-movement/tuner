@@ -1,0 +1,4 @@
+- [x] A synthetic strum generator (inharmonic, decaying partials, onset spread, level variation, noise) exists in tuner-core with tests
+- [x] At least two approaches are implemented and compared on the same synthetic strums with reported error statistics
+- [x] Findings record the chosen approach, accuracy, cost per analysis, known failure cases and a recommendation for the strum-check issue
+- [x] cargo test and cargo clippy pass

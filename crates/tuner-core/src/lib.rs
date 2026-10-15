@@ -2,6 +2,8 @@
 //! can be tested natively and wrapped for WASM by `tuner-wasm`.
 
 pub mod pitch;
+pub mod poly;
+pub mod synth;
 pub mod tuning;
 
 pub use pitch::{PitchConfig, PitchDetector, PitchEstimate};
