@@ -1,0 +1,8 @@
+[package]
+name = "tuner-core"
+description = "Pitch analysis for the tuner, independent of the web platform"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]

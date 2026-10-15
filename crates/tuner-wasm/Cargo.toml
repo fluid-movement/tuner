@@ -1,0 +1,12 @@
+[package]
+name = "tuner-wasm"
+description = "Raw C-ABI WASM exports of tuner-core for use inside an AudioWorklet"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+tuner-core = { path = "../tuner-core" }

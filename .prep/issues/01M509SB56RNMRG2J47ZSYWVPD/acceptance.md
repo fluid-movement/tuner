@@ -1,0 +1,4 @@
+- [x] cargo test passes for the workspace
+- [x] pnpm build in web/ builds the wasm and produces a static site containing static/wasm/tuner.wasm
+- [x] The dev page loads tuner.wasm and shows a value returned by a tuner-wasm export
+- [x] pnpm test (Vitest) and pnpm check pass in web/
