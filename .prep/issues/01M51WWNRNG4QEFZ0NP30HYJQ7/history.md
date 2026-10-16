@@ -1,0 +1,1 @@
+- 2026-10-16T08:26:10Z claude-code/opus-5.5: First CI run failed in check: svelte-check types asset() paths from files in static/, and lint ran before anything built the wasm on the fresh runner. Added a precheck script that builds the wasm; just check passes from a clean tree.

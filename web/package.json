@@ -18,7 +18,8 @@
 		"prebuild": "pnpm build:wasm",
 		"pretest": "pnpm build:wasm",
 		"test:watch": "vitest",
-		"test:e2e": "playwright test"
+		"test:e2e": "playwright test",
+		"precheck": "pnpm build:wasm"
 	},
 	"devDependencies": {
 		"@eslint/js": "^10.0.1",
