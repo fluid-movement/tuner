@@ -1,0 +1,4 @@
+- [x] docker build succeeds from a clean checkout and the container serves the app on port 80 with tuner.wasm as application/wasm
+- [x] Hashed assets are served immutable; index.html and tuner.wasm are revalidated; /healthz returns 200
+- [x] just docker builds and runs the image locally; just check still passes
+- [x] README documents the Coolify setup (build pack, port, domain, health check, auto deploy)

@@ -1,2 +1,5 @@
 /target
 .DS_Store
+
+# Real instrument recordings (see the recording-analysis issue)
+/recordings/

@@ -13,11 +13,16 @@ export const TONES = {
 	c4: 261.62557
 } as const;
 
+/** Test an already running deployment instead of a local preview build. */
+const external = process.env.E2E_BASE_URL;
+
 export default defineConfig({
 	testDir: 'e2e',
-	webServer: { command: 'pnpm build && pnpm preview --port 4173 --strictPort', port: 4173 },
+	webServer: external
+		? undefined
+		: { command: 'pnpm build && pnpm preview --port 4173 --strictPort', port: 4173 },
 	use: {
-		baseURL: 'http://localhost:4173',
+		baseURL: external ?? 'http://localhost:4173',
 		// The installed Chrome, so no browser download is needed.
 		channel: 'chrome'
 	},

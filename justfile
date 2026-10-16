@@ -44,6 +44,11 @@ lint: setup
 # Everything CI should run: lint, unit tests, build and browser tests
 check: lint test build e2e
 
+# Build the production Docker image and serve it on http://localhost:8080
+docker:
+    docker build -t tuner .
+    docker run --rm -p 8080:80 tuner
+
 # Format Rust and web sources
 fmt:
     cargo fmt

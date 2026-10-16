@@ -1,0 +1,11 @@
+target
+**/node_modules
+web/build
+web/.svelte-kit
+web/static/wasm
+web/test-results
+web/playwright-report
+recordings
+.prep
+.git
+.claude

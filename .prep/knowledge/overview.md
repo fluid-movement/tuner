@@ -20,7 +20,7 @@ Audio flows microphone → `getUserMedia` → AudioWorkletProcessor hosting the 
 
 ## Running
 
-The root `justfile` is the entry point: `just dev` installs the wasm target and web dependencies, builds the wasm and starts Vite; `just check` runs fmt/clippy, svelte-check/eslint/prettier, Rust and Vitest unit tests, the production build and the Playwright browser tests. `just --list` shows the rest.
+The root `justfile` is the entry point: `just dev` installs the wasm target and web dependencies, builds the wasm and starts Vite; `just check` runs fmt/clippy, svelte-check/eslint/prettier, Rust and Vitest unit tests, the production build and the Playwright browser tests. `just --list` shows the rest. Production is a Docker image deployed on Coolify; see [Deployment](/conventions/deployment.md).
 
 ## Roadmap
 

@@ -12,7 +12,7 @@ scope:
   - web/src/lib/wasm
   - web/e2e
   - web/playwright.config.ts
-confirmed_commit: e7dc5754fa285b7054afb660c6a8f6499b76642c
+confirmed_commit: 8dc5d188a4d3b829233bfc7ebb129446d14979f8
 ---
 
 Moves microphone audio to the [Pitch core](/components/pitch-core.md) on the audio thread and delivers readings to the UI. Constraints that shaped it are in [WASM inside an AudioWorklet](/pitfalls/audioworklet-wasm.md). What the page does with readings is in [Single-string tuner](/features/single-string-tuner.md).
@@ -37,4 +37,4 @@ A `PitchReading` is `{ frequency, clarity, midi, cents }`. Readings are raw; smo
 
 - Rust tests in `tuner-wasm` call the exports natively.
 - Vitest: `frame-accumulator.spec.ts` (framing, ring wrap) and `tuner.spec.ts` (built wasm detects 110 Hz, tunings and nearest string; `pnpm test` builds the wasm first).
-- Playwright (`just e2e`, `web/e2e/`): the production build in the installed Chrome (`channel: 'chrome'`). Chrome takes its fake-microphone file at launch, so `playwright.config.ts` defines one project per tone in `TONES` and tests opt in with a tag such as `@e2`. `e2e/wav.ts` writes the tones with a length holding a whole number of cycles so the looped file has no click.
+- Playwright (`just e2e`, `web/e2e/`): the production build in the installed Chrome (`channel: 'chrome'`). Chrome takes its fake-microphone file at launch, so `playwright.config.ts` defines one project per tone in `TONES` and tests opt in with a tag such as `@e2`. `e2e/wav.ts` writes the tones with a length holding a whole number of cycles so the looped file has no click. `E2E_BASE_URL` points the tests at a running deployment instead of the local preview (see [Deployment](/conventions/deployment.md)).
