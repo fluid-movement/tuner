@@ -17,6 +17,17 @@ just check   # lint, unit tests, production build and browser tests
 
 Other recipes: `just --list` (`build`, `preview`, `test`, `e2e`, `lint`, `fmt`, `clean`). `just dev --host` serves on your network; phones need HTTPS for microphone access, so test there with a tunnel or a deployed build.
 
+## Analysing real recordings
+
+`crates/tuner-lab` checks the tuner against real guitar and ukulele recordings. Record takes into `recordings/` (gitignored), one tuning state per file:
+
+1. Set a tuning state and don't touch the pegs for the rest of the take.
+2. Pluck each string on its own, low to high, letting each ring ~2 s.
+3. Strum all strings 3–4 times, letting each ring ~3 s.
+4. Save as WAV or FLAC (mono or stereo, 44.1/48 kHz, no noise suppression or auto gain), named after the instrument and the take: `guitar_04_e4-flat.wav`, `ukulele_02_c-sharp.flac`.
+
+Then `just analyze` (or `just analyze path/to/files --json`). It splits each take into plucks and strums, shows what the single-string tuner displays for each pluck (time to first reading, share of the first 2 s with a reading, spread and drift of the value) and checks the strum estimates against the plucks. `just analyze-demo` writes synthetic example takes to `recordings/demo/` to try it without recordings.
+
 ## Deployment (CI → GHCR → Coolify)
 
 Images are built in GitHub Actions, not on the server (the VPS has 4 GB RAM and on-server builds have taken it down). `.github/workflows/ci.yml`:

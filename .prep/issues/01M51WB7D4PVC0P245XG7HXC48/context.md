@@ -1,0 +1,8 @@
+See [Note tracker](/components/note-tracker.md), [Polyphonic string estimation](/components/poly-estimation.md), [Pitch, notes and tunings](/conventions/pitch-and-tunings.md).
+
+- New workspace crate `crates/tuner-lab` (native only, never compiled to wasm): library + `tuner-lab` binary. Dependencies `hound` (WAV) and `claxon` (FLAC); stereo is mixed to mono. tuner-core stays dependency-light.
+- Pipeline: in-band envelope (10 ms hops) → onsets where the envelope jumps well above its recent minimum and the floor; onsets within ~80 ms merge into one event (a strum's strings); segments run to the next event. Classification: a single pluck is clearly periodic (high MPM clarity shortly after the onset), a strum is not; the report shows the classification so it can be sanity-checked.
+- Plucks: MonoTuner over the segment; truth = median tracked frequency 0.2–1.5 s after onset, assigned to the nearest string of the instrument from the file name. Experience metrics: first reading latency, shown share of the first 2 s (or the segment), spread (max − min) of the shown value over 0.2–1.5 s, drift (late median − early median).
+- Strums: `estimate_resolved` on a 32768-sample window starting 120 ms after the event onset (≥ 80 ms after the last string, per the research); error and in-tune/flat/sharp agreement per string against the pluck truth.
+- Output: per-file tables and an aggregate summary in Markdown on stdout (`--json` for machine use). `just analyze [dir]` (default `recordings/`).
+- Tests: synthetic takes from `tuner_core::synth` written to WAV in a temp dir (plucks + strums with known detunes, onset spread, noise, mic low cut), asserting segmentation, classification, truth within ±2 cents and strum agreement.

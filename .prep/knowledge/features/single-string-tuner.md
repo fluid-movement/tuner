@@ -11,6 +11,7 @@ scope:
   - web/src/lib/tuner
   - web/e2e/tuner.test.ts
   - crates/tuner-core/src/tracker.rs
+confirmed_commit: 80df2418afdd067977dd296d843a9c4155ca655e
 ---
 
 The main page (`web/src/routes/+page.svelte`) tunes one string at a time.

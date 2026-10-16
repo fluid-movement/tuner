@@ -44,6 +44,14 @@ lint: setup
 # Everything CI should run: lint, unit tests, build and browser tests
 check: lint test build e2e
 
+# Analyse guitar/ukulele recordings (default: recordings/); see `just analyze --help`
+analyze *args:
+    cargo run -q --release -p tuner-lab -- {{args}}
+
+# Write synthetic example takes to try `just analyze` without recordings
+analyze-demo dir="recordings/demo":
+    cargo run -q --release -p tuner-lab -- demo {{dir}}
+
 # Build the production Docker image and serve it on http://localhost:8080
 docker:
     docker build -t tuner .

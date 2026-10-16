@@ -7,11 +7,10 @@ tags:
 priority: high
 ---
 
-The user will record takes of guitar and ukulele (WAV/FLAC, mono, 44.1/48 kHz) into a gitignored `recordings/` folder. Each take holds one tuning state: each string plucked separately (low to high, ~2 s each), then 3–4 strums (~3 s each), without touching the pegs. File names describe the take (e.g. `guitar_04_e4-flat.wav`).
+The user will record takes of guitar and ukulele (WAV or FLAC, mono or stereo, 44.1/48 kHz) into a gitignored `recordings/` folder. Each take holds one tuning state: each string plucked separately (low to high, ~2 s each), then 3–4 strums (~3 s each), without touching the pegs. File names start with the instrument and describe the take (e.g. `guitar_04_e4-flat.wav`, `ukulele_02_c-sharp.flac`).
 
-Build a tool that, per file: detects onsets and segments the take; classifies segments as single plucks or strums; measures each single pluck with the monophonic PitchDetector to get per-string ground truth; runs the polyphonic estimator on each strum with the window placement recommended by the strum research; and reports per-string error and verdict agreement, plus aggregate statistics across takes. It should also report how the single-string detector behaves on the real plucks (stability over the ring).
+Build a tool that, per file: detects onsets and segments the take; classifies segments as single plucks or strums; runs each single pluck through the single-string tuner (MonoTuner) to get per-string ground truth and to report the single-string experience on real strings (time to first reading, share of the ring with a reading, stability and drift of the shown value); runs the polyphonic estimator on each strum with the window placement recommended by the strum research; and reports per-string strum error and verdict agreement against the pluck truth, plus aggregate statistics across takes.
 
-The results decide how the strum check is tuned (window length, presence detection, B3/E4 handling) and which recordings become committed regression fixtures.
+The tool is built and tested before recordings exist, using synthetic takes rendered to WAV. Which recordings become committed regression fixtures (trimmed, or via Git LFS) is decided in a follow-up once real recordings exist.
 
 ## Open questions
-- Which takes become committed fixtures (trimmed, or via Git LFS)?

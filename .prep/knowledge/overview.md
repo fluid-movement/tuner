@@ -14,6 +14,7 @@ A browser-based tuner for stringed instruments, mainly acoustic guitar and ukule
 
 - `crates/tuner-core`: pure Rust DSP, tested natively with synthetic signals. See [Pitch core](/components/pitch-core.md), [Note tracker](/components/note-tracker.md) (what the display shows over a pluck's life), [Pitch, notes and tunings](/conventions/pitch-and-tunings.md) and, for strums, [Polyphonic string estimation](/components/poly-estimation.md). Depends only on `rustfft`.
 - `crates/tuner-wasm`: raw C-ABI WASM exports of the core, with no JS imports.
+- `crates/tuner-lab`: native CLI that checks the core against real recordings (`just analyze`). See [Recording analysis](/components/tuner-lab.md).
 - `web/`: SvelteKit 3 app (Vite, static adapter, pnpm), shipped as an installable offline PWA. See [UI](/components/ui.md) and [Single-string tuner](/features/single-string-tuner.md).
 
 Audio flows microphone → `getUserMedia` → AudioWorkletProcessor hosting the WASM module (detection and note tracking off the main thread) → results posted over the worklet port → Svelte UI. See [Audio pipeline](/components/audio-pipeline.md) and [WASM inside an AudioWorklet](/pitfalls/audioworklet-wasm.md).

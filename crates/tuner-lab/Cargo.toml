@@ -1,0 +1,14 @@
+[package]
+name = "tuner-lab"
+description = "Offline analysis of real guitar/ukulele recordings against tuner-core (native only)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+claxon = "0.4.3"
+hound = "3.5.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tuner-core = { path = "../tuner-core" }

@@ -1,0 +1,5 @@
+- [x] tuner-lab reads WAV and FLAC (mono or stereo, 44.1/48 kHz) and segments a take into plucks and strums, reporting the classification
+- [x] On synthetic takes, every pluck and strum is found and classified correctly, pluck truth is within ±2 cents of the rendered frequencies, and strum verdicts agree with the truth
+- [x] Per-file and aggregate reports cover single-string experience (latency, shown share, spread, drift) and strum error/verdict agreement; --json output exists
+- [x] just analyze runs the tool on recordings/ (or a given directory) and explains the recording protocol when it is empty
+- [x] cargo test, clippy and just check pass; tuner-core gains no new dependencies

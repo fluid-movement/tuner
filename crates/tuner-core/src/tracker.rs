@@ -35,6 +35,12 @@ pub struct TrackerConfig {
     /// Consecutive confident frames needed to lock onto a note (a new one, or
     /// another one while tracking).
     pub retarget_frames: u32,
+    /// An onset also needs an attack: the level must have risen by this many
+    /// dB above its minimum over the last `attack_seconds`. Without it, the
+    /// periodicity of two strings ringing together (B3 + E4 repeat at E2's
+    /// period) would look like a new note as they decay.
+    pub attack_db: f32,
+    pub attack_seconds: f32,
     /// Seconds without a usable frame before the note is released.
     pub release_seconds: f32,
     /// Seconds a released reading stays on display.
@@ -58,6 +64,9 @@ pub struct TrackerConfig {
 
 /// Largest supported [`TrackerConfig::median`] window.
 pub const MAX_MEDIAN: usize = 9;
+/// Frames of level history kept for attack detection (bounds
+/// `attack_seconds / frame_seconds`).
+const MAX_ATTACK_FRAMES: usize = 16;
 
 impl TrackerConfig {
     /// Defaults for frames every `frame_seconds` (about 21 ms in the app).
@@ -70,6 +79,8 @@ impl TrackerConfig {
             keep_margin_db: 10.0,
             keep_cents: 35.0,
             retarget_frames: 2,
+            attack_db: 6.0,
+            attack_seconds: 0.1,
             release_seconds: 0.25,
             hold_seconds: 3.0,
             steady_clarity: 0.95,
@@ -128,13 +139,16 @@ pub struct NoteTracker {
     candidate: Option<(f32, u32)>,
     /// Steady-pitch candidate without an onset: (cents, consecutive frames).
     steady: Option<(f32, u32)>,
+    /// Levels (dB) of the most recent frames, for attack detection.
+    recent_levels: [f32; MAX_ATTACK_FRAMES],
+    recent_next: usize,
     just_locked: bool,
 }
 
 const SILENCE_DB: f32 = -120.0;
-/// Starting noise floor when the very first frame is already a confident
-/// note, so that note still counts as an onset.
-const INITIAL_FLOOR_DB: f32 = -90.0;
+/// When the very first frame is already a confident note, the floor starts
+/// this far below it (so that note still counts as an onset).
+const ASSUMED_SNR_DB: f32 = 30.0;
 /// Rise time constant of the floor on unpitched frames while no note is
 /// tracked.
 const NOISE_RISE_SECONDS: f32 = 0.5;
@@ -165,6 +179,8 @@ impl NoteTracker {
             held_seconds: 0.0,
             candidate: None,
             steady: None,
+            recent_levels: [SILENCE_DB; MAX_ATTACK_FRAMES],
+            recent_next: 0,
             just_locked: false,
         }
     }
@@ -192,14 +208,32 @@ impl NoteTracker {
         // The first frame sets the floor if it sounds like noise; if it is
         // already a confident note, start low so that note still counts.
         let floor = *self.floor_db.get_or_insert(if clarity >= c.onset_clarity {
-            INITIAL_FLOOR_DB
+            level_db - ASSUMED_SNR_DB
         } else {
             level_db
         });
+        let attack_frames =
+            ((c.attack_seconds / c.frame_seconds).round() as usize).clamp(1, MAX_ATTACK_FRAMES);
+        let recent_min = (1..=attack_frames)
+            .map(|k| {
+                self.recent_levels[(self.recent_next + MAX_ATTACK_FRAMES - k) % MAX_ATTACK_FRAMES]
+            })
+            .fold(f32::MAX, f32::min);
+        let attack = level_db - recent_min >= c.attack_db;
+        self.recent_levels[self.recent_next] = level_db;
+        self.recent_next = (self.recent_next + 1) % MAX_ATTACK_FRAMES;
         let raw = estimate.map(|e| to_cents(e.frequency));
 
+        // Onset quality. The attack is required on the first frame of a
+        // candidate; the confirming frame only needs to agree in pitch.
+        let candidate = self.candidate;
         let onset = |cents: Option<f32>| {
-            cents.filter(|_| clarity >= c.onset_clarity && level_db >= floor + c.onset_margin_db)
+            cents.filter(|&x| {
+                let confirms = candidate.is_some_and(|(prev, _)| (x - prev).abs() <= c.keep_cents);
+                clarity >= c.onset_clarity
+                    && level_db >= floor + c.onset_margin_db
+                    && (attack || confirms)
+            })
         };
 
         match self.state {
@@ -298,11 +332,12 @@ impl NoteTracker {
         count >= self.config.retarget_frames
     }
 
-    /// Moves `x` by an octave if that puts it within the follow range of the
-    /// tracked pitch (decaying strings often slip an octave).
+    /// Moves `x` by one or two octaves if that puts it within the follow range
+    /// of the tracked pitch (decaying strings often slip an octave; two strings
+    /// ringing together can read two octaves low).
     fn fold_octave(&self, x: f32) -> f32 {
         let diff = x - self.smoothed;
-        for shift in [1200.0, -1200.0] {
+        for shift in [1200.0, -1200.0, 2400.0, -2400.0] {
             if (diff - shift).abs() <= self.config.keep_cents {
                 return x - shift;
             }
@@ -653,6 +688,24 @@ mod tests {
     }
 
     #[test]
+    fn two_strings_ringing_together_do_not_fake_a_new_note() {
+        // B3 still rings when a flat E4 is plucked; as both decay, the mixture
+        // repeats at E2's period (B3:E4 = 3:4). Without an attack that must
+        // not replace the E4 reading.
+        let e4 = 329.628 * 2f32.powf(-12.0 / 1200.0);
+        let out = track(
+            &[string(246.94, 0.08, 0.1), string(e4, 0.08, 2.1)],
+            4.3,
+            0.002,
+            21,
+        );
+        for (t, o) in out.iter().filter(|(t, _)| (2.2..4.1).contains(t)) {
+            let hz = o.frequency.expect("shown");
+            assert!(cents_between(hz, e4).abs() < 5.0, "{t:.2}s shows {hz} Hz");
+        }
+    }
+
+    #[test]
     fn octave_slips_are_folded_back() {
         let config = TrackerConfig::new(HOP as f32 / RATE);
         let mut t = NoteTracker::new(config);
@@ -672,10 +725,15 @@ mod tests {
             "needs confirming"
         );
         assert_eq!(t.push(est(110.0, 0.95), 0.05).state, TrackState::Tracking);
-        for _ in 0..30 {
-            let o = t.push(est(220.0, 0.6), 0.05);
-            assert_eq!(o.state, TrackState::Tracking);
-            assert!(cents_between(o.frequency.unwrap(), 110.0).abs() < 0.5);
+        for hz in [220.0, 55.0, 440.0, 27.5] {
+            for _ in 0..10 {
+                let o = t.push(est(hz, 0.6), 0.05);
+                assert_eq!(o.state, TrackState::Tracking);
+                assert!(
+                    cents_between(o.frequency.unwrap(), 110.0).abs() < 0.5,
+                    "{hz}"
+                );
+            }
         }
     }
 }
