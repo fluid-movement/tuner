@@ -24,5 +24,8 @@ RUN pnpm build
 FROM nginx:1.29-alpine
 COPY deploy/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=web /src/web/build /usr/share/nginx/html
+# Commit the image was built from; CI polls it to know a deploy is live.
+ARG GIT_SHA=dev
+RUN echo "$GIT_SHA" > /usr/share/nginx/html/version.txt
 EXPOSE 80
 HEALTHCHECK --interval=30s --timeout=3s CMD wget -qO- http://127.0.0.1/healthz || exit 1

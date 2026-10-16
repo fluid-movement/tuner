@@ -10,17 +10,25 @@ scope:
   - Dockerfile
   - deploy
   - .dockerignore
+  - .github/workflows
   - web/scripts/build-wasm.js
   - web/playwright.config.ts
 ---
 
-The app is a static site. Production runs it from the root `Dockerfile` on the user's Coolify instance; the step-by-step Coolify setup is in the README.
+The app is a static site shipped as a Docker image. GitHub Actions builds it and pushes it to GHCR; the user's Coolify instance only pulls and runs it. Never build on the server: the VPS has 4 GB RAM shared with other services and on-server builds have crashed it. Setup steps for Coolify and GitHub are in the README.
+
+## CI (`.github/workflows/ci.yml`)
+
+- `check` (pushes and PRs): Rust stable + wasm target, Node 24, pnpm 12.11.2, just; runs `just check`. Playwright uses the runner's preinstalled Google Chrome. Uploads `web/test-results/` on failure.
+- `image` (main, after check): buildx with GHA cache, pushes `ghcr.io/fluid-movement/tuner:latest` and `:<sha>`, passing `GIT_SHA`.
+- `deploy` (after image, environment `production`): calls `secrets.COOLIFY_WEBHOOK` with `secrets.COOLIFY_TOKEN` as bearer, polls `vars.PROD_URL/version.txt` until it equals the commit SHA (10 min max), then runs Playwright with `E2E_BASE_URL`. Skips with a notice when any of the three is missing.
+- Validate workflow edits with `docker run --rm -v "$PWD":/repo --workdir /repo rhysd/actionlint:1.7.7`. A `run:` value containing `: ` (e.g. an `Authorization: Bearer` header) must be a block scalar.
 
 ## Image
 
 1. `rust:1.98-slim` + `wasm32-unknown-unknown` builds `tuner-wasm`.
 2. `node:24-slim` with pnpm pinned to the local version (`npm install -g pnpm@12.11.2`; keep in sync with the lockfile) installs with `--frozen-lockfile` and runs `pnpm build`. `TUNER_WASM_PREBUILT` points `web/scripts/build-wasm.js` at the wasm from stage 1, so the Node stage needs no Rust.
-3. `nginx:1.29-alpine` serves `web/build` on port 80 with `deploy/nginx.conf`, plus a Docker `HEALTHCHECK` on `/healthz`.
+3. `nginx:1.29-alpine` serves `web/build` on port 80 with `deploy/nginx.conf`, plus a Docker `HEALTHCHECK` on `/healthz`. Build arg `GIT_SHA` (default `dev`) is written to `/version.txt`.
 
 `.dockerignore` keeps `target/`, `node_modules/`, build output, `recordings/`, `.prep` and `.git` out of the context. `just docker` builds and runs the image on port 8080.
 
@@ -33,7 +41,7 @@ The app is a static site. Production runs it from the root `Dockerfile` on the u
 
 ## Coolify
 
-Dockerfile build pack, port 80 exposed, domain with HTTPS (required for the microphone on phones), health check `/healthz`. Coolify's proxy terminates TLS. Auto deploy on push via the GitHub App until CI takes over deploys through Coolify's deploy webhook.
+A *Docker Image* resource on `ghcr.io/fluid-movement/tuner:latest` (the package is public, so no registry credentials), port 80 exposed, domain with HTTPS (required for the microphone on phones), health check `/healthz`, auto deploy off; CI triggers deploys through the resource's deploy webhook. Coolify's proxy terminates TLS.
 
 ## Testing a deployment
 

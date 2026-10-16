@@ -1,0 +1,5 @@
+- [ ] On pull requests and pushes the check job runs just check
+- [ ] On main, a passing check builds and pushes ghcr.io/fluid-movement/tuner with :latest and :<sha> tags
+- [ ] The deploy job triggers Coolify, waits for version.txt to match the commit, then runs the browser tests against the live URL; it skips with a notice when secrets are missing
+- [ ] The workflow passes actionlint; the image serves version.txt with the build's SHA
+- [ ] README documents the GitHub secrets/variables and the Coolify Docker Image resource setup
