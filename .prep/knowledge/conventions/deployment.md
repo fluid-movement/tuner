@@ -13,6 +13,7 @@ scope:
   - .github/workflows
   - web/scripts/build-wasm.js
   - web/playwright.config.ts
+confirmed_commit: 37831a0c45ca4b5b67e0dfb5845aa8962c438d95
 ---
 
 The app is a static site shipped as a Docker image. GitHub Actions builds it and pushes it to GHCR; the user's Coolify instance only pulls and runs it. Never build on the server: the VPS has 4 GB RAM shared with other services and on-server builds have crashed it. Setup steps for Coolify and GitHub are in the README.

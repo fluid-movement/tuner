@@ -1,0 +1,6 @@
+- [x] Simulated plucks at about -34 dBFS peak with -50 dBFS noise and a 120 Hz low cut show a reading (tracking or held) for at least 95% of the first 2 s on every guitar and ukulele string, with tracked readings within ±3 cents
+- [x] Noise-only input never locks onto a note; a pluck is shown within 100 ms; switching to another string retargets within 150 ms
+- [x] After the string fades the last reading is held (dimmed) for about 3 s, then cleared
+- [x] The page shows an input level meter and a ?debug overlay with raw frequency, clarity, level and noise floor
+- [x] Playwright: a decaying fake-mic pluck stays on screen through its decay; existing e2e tests still pass
+- [x] just check passes

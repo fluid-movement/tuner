@@ -131,6 +131,27 @@ pub fn render(
     out
 }
 
+/// Applies a 2nd-order Butterworth high-pass in place, a stand-in for the
+/// low cut of phone and laptop microphones (typically 80–150 Hz), which
+/// weakens a guitar's low fundamentals.
+pub fn highpass(signal: &mut [f32], cutoff: f32, sample_rate: f32) {
+    let w = TAU * cutoff / sample_rate;
+    let (cos, alpha) = (w.cos(), w.sin() / std::f32::consts::SQRT_2);
+    let a0 = 1.0 + alpha;
+    let b = [
+        (1.0 + cos) / 2.0 / a0,
+        -(1.0 + cos) / a0,
+        (1.0 + cos) / 2.0 / a0,
+    ];
+    let a = [-2.0 * cos / a0, (1.0 - alpha) / a0];
+    let (mut x1, mut x2, mut y1, mut y2) = (0.0, 0.0, 0.0, 0.0);
+    for s in signal.iter_mut() {
+        let y = b[0] * *s + b[1] * x1 + b[2] * x2 - a[0] * y1 - a[1] * y2;
+        (x2, x1, y2, y1) = (x1, *s, y1, y);
+        *s = y;
+    }
+}
+
 /// Settings for [`random_strum`].
 #[derive(Debug, Clone, Copy)]
 pub struct StrumOptions {

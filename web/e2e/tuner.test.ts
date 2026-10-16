@@ -60,3 +60,18 @@ test('fits a 375 px phone screen without horizontal scrolling @a2', async ({ pag
 	await page.waitForTimeout(500);
 	await page.screenshot({ path: 'test-results/phone.png', fullPage: true });
 });
+
+test('a quiet decaying pluck stays on screen through its decay @pluck', async ({ page }) => {
+	await page.goto('/?debug');
+	await page.getByRole('button', { name: 'Start' }).click();
+	const note = page.getByTestId('note');
+	await expect(note).toHaveText('A2', { timeout: 10_000 });
+	await expect(page.getByTestId('level')).toBeVisible();
+	await expect(page.getByTestId('debug')).toContainText('clarity');
+	// Sample the display for 2.5 s: the note never disappears (tracked, then
+	// held after the string fades) and always reads A2.
+	for (let i = 0; i < 10; i++) {
+		await expect(note).toHaveText('A2');
+		await page.waitForTimeout(250);
+	}
+});

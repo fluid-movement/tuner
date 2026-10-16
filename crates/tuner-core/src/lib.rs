@@ -4,9 +4,11 @@
 pub mod pitch;
 pub mod poly;
 pub mod synth;
+pub mod tracker;
 pub mod tuning;
 
 pub use pitch::{PitchConfig, PitchDetector, PitchEstimate};
+pub use tracker::{MonoTuner, NoteTracker, TrackState, TrackerConfig, TrackerOutput};
 pub use tuning::{Instrument, Note, StringTarget};
 
 /// Version of the analysis core, exposed so the web app can confirm the

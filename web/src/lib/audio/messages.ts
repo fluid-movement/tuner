@@ -1,4 +1,4 @@
-import type { PitchReading } from '../wasm/tuner.ts';
+import type { TrackReading } from '../wasm/tuner.ts';
 
 /** Registered name of the AudioWorkletProcessor in tuner-processor.ts. */
 export const PROCESSOR_NAME = 'tuner-processor';
@@ -13,5 +13,5 @@ export interface ProcessorOptions {
 /** Messages posted by the processor over its port. */
 export type ProcessorMessage =
 	| { type: 'ready'; frameSize: number }
-	| { type: 'pitch'; reading: PitchReading | null }
+	| { type: 'track'; reading: TrackReading }
 	| { type: 'error'; message: string };

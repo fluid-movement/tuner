@@ -21,3 +21,5 @@
 - 2026-10-15T17:59:02Z claude-code/opus-5.5: reported pass evidence 6501e1219590ea0ecbcbe81b69ac972b598faa82483a5c68764e476af8d3a717 for requirement c780691250b946d5cccc3f19ced68665554dece0883fbfda39591d43e5d5a346
 
 - 2026-10-15T17:59:02Z claude-code/opus-5.5: reported pass evidence c401d78b935181574a52ba3e2ea96661a2e8e54a9b7f6086a688dc4ef943a4b6 for requirement ee525140e34acf6f0b81417505088c031f409062b752c3a9de76313ce838af61
+
+- 2026-10-16T08:48:57Z claude-code/opus-5.5: User tried the live site: hard to register plucks, readings vanish quickly. Fix tracked in 01M51YCSRHX8W5C0B760VNVTE5; real-instrument check (criterion 1) continues after it.

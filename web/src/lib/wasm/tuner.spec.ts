@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { Tunings, WasmPitchDetector, instantiateTuner, noteName } from './tuner';
+import { Tunings, WasmMonoTuner, instantiateTuner, noteName } from './tuner';
 
 const bytes = readFileSync(new URL('../../../static/wasm/tuner.wasm', import.meta.url));
 
@@ -17,18 +17,28 @@ describe('tuner wasm', () => {
 		expect(tuner.tuner_version()).toBe(1);
 	});
 
-	it('detects a 110 Hz tone written into its input buffer', async () => {
-		const detector = new WasmPitchDetector(await instantiateTuner(bytes), 48_000);
-		expect(detector.frameSize).toBe(2048);
+	it('tracks a 110 Hz tone and holds it after silence', async () => {
+		const tuner = new WasmMonoTuner(await instantiateTuner(bytes), 48_000, 1024);
+		expect(tuner.frameSize).toBe(2048);
+		const quiet = Float32Array.from({ length: 2048 }, (_, i) => 1e-4 * Math.sin(i));
+		for (let i = 0; i < 5; i++) expect(tuner.process(quiet).state).toBe('idle');
 
-		const reading = detector.detect(sine(110, 48_000, 2048));
-		expect(reading?.frequency).toBeCloseTo(110, 1);
-		expect(reading?.midi).toBe(45);
-		expect(noteName(reading!.midi)).toBe('A2');
-		expect(Math.abs(reading!.cents)).toBeLessThan(1);
+		const tone = sine(110, 48_000, 2048);
+		expect(tuner.process(tone).state).toBe('idle'); // a new note is confirmed first
+		const locked = tuner.process(tone);
+		expect(locked).toMatchObject({ state: 'tracking', locked: true });
+		expect(locked.frequency).toBeCloseTo(110, 1);
+		expect(locked.clarity).toBeGreaterThan(0.9);
+		expect(locked.levelDb).toBeGreaterThan(locked.floorDb + 12);
 
-		expect(detector.detect(new Float32Array(2048))).toBeNull();
-		detector.free();
+		let last = locked;
+		for (let i = 0; i < 20; i++) last = tuner.process(quiet);
+		expect(last.state).toBe('holding');
+		expect(last.frequency).toBeCloseTo(110, 1);
+
+		tuner.reset();
+		expect(tuner.process(quiet)).toMatchObject({ state: 'idle', frequency: null });
+		tuner.free();
 	});
 });
 

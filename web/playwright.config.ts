@@ -1,6 +1,6 @@
 import { defineConfig } from '@playwright/test';
 import { fileURLToPath } from 'node:url';
-import { writeToneWav } from './e2e/wav.ts';
+import { writePluckWav, writeToneWav } from './e2e/wav.ts';
 
 /**
  * Tones played by Chrome's fake microphone. Chrome takes the file at launch,
@@ -16,6 +16,27 @@ export const TONES = {
 /** Test an already running deployment instead of a local preview build. */
 const external = process.env.E2E_BASE_URL;
 
+/** A quiet (≈ −34 dBFS peak) decaying A2 pluck, re-plucked every 3 s. */
+export const PLUCK = { name: 'pluck', frequency: 110, period: 3 } as const;
+
+function fakeMic(name: string, write: (path: string) => void) {
+	const wav = fileURLToPath(new URL(`./test-results/fake-mic-${name}.wav`, import.meta.url));
+	write(wav);
+	return {
+		name,
+		grep: new RegExp(`@${name}(?![\\w-])`),
+		use: {
+			launchOptions: {
+				args: [
+					'--use-fake-device-for-media-stream',
+					'--use-fake-ui-for-media-stream',
+					`--use-file-for-fake-audio-capture=${wav}`
+				]
+			}
+		}
+	};
+}
+
 export default defineConfig({
 	testDir: 'e2e',
 	webServer: external
@@ -26,21 +47,10 @@ export default defineConfig({
 		// The installed Chrome, so no browser download is needed.
 		channel: 'chrome'
 	},
-	projects: Object.entries(TONES).map(([name, frequency]) => {
-		const wav = fileURLToPath(new URL(`./test-results/fake-mic-${name}.wav`, import.meta.url));
-		writeToneWav(wav, frequency);
-		return {
-			name,
-			grep: new RegExp(`@${name}(?![\\w-])`),
-			use: {
-				launchOptions: {
-					args: [
-						'--use-fake-device-for-media-stream',
-						'--use-fake-ui-for-media-stream',
-						`--use-file-for-fake-audio-capture=${wav}`
-					]
-				}
-			}
-		};
-	})
+	projects: [
+		...Object.entries(TONES).map(([name, frequency]) =>
+			fakeMic(name, (wav) => writeToneWav(wav, frequency))
+		),
+		fakeMic(PLUCK.name, (wav) => writePluckWav(wav, PLUCK.frequency, { period: PLUCK.period }))
+	]
 });

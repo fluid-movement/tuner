@@ -6,9 +6,14 @@
 //! parabolic interpolation. See McLeod & Wyvill, "A smarter way to find pitch"
 //! (2005).
 
-/// How long the low-pass filter is given to settle at the start of each
-/// frame; those samples are not analysed.
-const SETTLE_SECONDS: f32 = 0.003;
+/// Leading samples of each filtered frame that are not analysed while the
+/// low-pass settles: at least 3 ms, and 1.5 periods of the cutoff for low
+/// cutoffs (their impulse response rings longer).
+fn settle_samples(cutoff: Option<f32>, sample_rate: f32) -> usize {
+    cutoff.map_or(0, |fc| {
+        (sample_rate * 0.003f32.max(1.5 / fc)).ceil() as usize
+    })
+}
 
 /// The peak refinement fits lags within `lag / REFINE_WINDOW_DIVISOR` of the
 /// peak: about a twentieth of a period, where the peak is still parabolic.
@@ -20,7 +25,7 @@ pub struct PitchConfig {
     /// Sample rate of the frames passed to [`PitchDetector::detect`], in Hz.
     pub sample_rate: f32,
     /// Number of samples per frame. It must cover at least two periods of
-    /// `min_frequency`, plus 3 ms for the low-pass filter to settle.
+    /// `min_frequency`, plus a few ms for the low-pass filter to settle.
     pub frame_size: usize,
     /// Lowest frequency searched, in Hz.
     pub min_frequency: f32,
@@ -55,6 +60,18 @@ impl PitchConfig {
             lowpass_frequency: Some(1500.0),
         }
     }
+
+    /// Like [`new`](Self::new) but without the level and clarity cut-offs
+    /// (only digital silence is rejected), for use with a
+    /// [`NoteTracker`](crate::NoteTracker), which decides what to show
+    /// relative to the noise floor and the tracked note.
+    pub fn permissive(sample_rate: f32) -> Self {
+        Self {
+            min_rms: 1e-6,
+            min_clarity: 0.0,
+            ..Self::new(sample_rate)
+        }
+    }
 }
 
 /// A detected pitch.
@@ -75,6 +92,8 @@ pub struct PitchDetector {
     max_lag: usize,
     /// Leading filtered samples skipped while the low-pass settles.
     settle: usize,
+    /// RMS of the last frame's analysed signal.
+    level: f32,
     lowpass: Option<[Biquad; 2]>,
     /// The frame after filtering.
     filtered: Vec<f32>,
@@ -90,10 +109,7 @@ impl PitchDetector {
     pub fn new(config: PitchConfig) -> Self {
         let min_lag = ((config.sample_rate / config.max_frequency).floor() as usize).max(2);
         let max_lag = (config.sample_rate / config.min_frequency).ceil() as usize;
-        let settle = match config.lowpass_frequency {
-            Some(_) => (config.sample_rate * SETTLE_SECONDS).ceil() as usize,
-            None => 0,
-        };
+        let settle = settle_samples(config.lowpass_frequency, config.sample_rate);
         assert!(min_lag < max_lag, "empty frequency range");
         assert!(
             2 * max_lag + settle <= config.frame_size,
@@ -104,6 +120,7 @@ impl PitchDetector {
             min_lag,
             max_lag,
             settle,
+            level: 0.0,
             // One extra lag on each side so peaks at the range edges can be
             // interpolated.
             lowpass: config
@@ -111,12 +128,35 @@ impl PitchDetector {
                 .map(|f| Biquad::butterworth_lowpass_4th(f, config.sample_rate)),
             filtered: vec![0.0; config.frame_size],
             nsdf: vec![0.0; max_lag + 2],
-            energy: vec![0.0; config.frame_size - settle + 1],
+            energy: vec![0.0; config.frame_size + 1],
         }
     }
 
     pub fn config(&self) -> &PitchConfig {
         &self.config
+    }
+
+    /// RMS level of the last frame passed to [`detect`](Self::detect), with
+    /// DC removed and after the low-pass filter when one is configured (so
+    /// broadband noise above the search range doesn't count). Set whether or
+    /// not a pitch was found.
+    pub fn level(&self) -> f32 {
+        self.level
+    }
+
+    /// Changes the low-pass cutoff (Hz) for later frames, or removes the
+    /// filter with `None`. Allocation-free, for use on the audio thread: a
+    /// tracker narrows the band once it knows the note, so the strongly
+    /// inharmonic upper partials of low strings don't bias the pitch sharp.
+    pub fn set_lowpass(&mut self, cutoff: Option<f32>) {
+        if cutoff != self.config.lowpass_frequency {
+            self.config.lowpass_frequency = cutoff;
+            self.lowpass =
+                cutoff.map(|f| Biquad::butterworth_lowpass_4th(f, self.config.sample_rate));
+            // Keep two periods of the lowest frequency analysable.
+            self.settle = settle_samples(cutoff, self.config.sample_rate)
+                .min(self.config.frame_size - 2 * self.max_lag);
+        }
     }
 
     /// Estimates the pitch of `frame`, which must hold exactly
@@ -126,15 +166,21 @@ impl PitchDetector {
         assert_eq!(frame.len(), self.config.frame_size, "wrong frame size");
         let n = frame.len();
 
-        let power = frame
-            .iter()
-            .map(|&x| f64::from(x) * f64::from(x))
-            .sum::<f64>();
-        if ((power / n as f64).sqrt() as f32) < self.config.min_rms {
+        // Remove any DC offset first: it carries no pitch, and filtering it
+        // makes the low-pass ring (which looks perfectly periodic).
+        let mean = frame.iter().map(|&x| f64::from(x)).sum::<f64>() / n as f64;
+        let mut power = 0.0f64;
+        for (y, &x) in self.filtered.iter_mut().zip(frame) {
+            let v = f64::from(x) - mean;
+            *y = v as f32;
+            power += v * v;
+        }
+        let rms = (power / n as f64).sqrt() as f32;
+        self.level = rms;
+        if rms < self.config.min_rms {
             return None;
         }
 
-        self.filtered.copy_from_slice(frame);
         if let Some(stages) = &self.lowpass {
             for stage in stages {
                 stage.apply(&mut self.filtered);
@@ -146,6 +192,8 @@ impl PitchDetector {
         for (i, &x) in frame.iter().enumerate() {
             self.energy[i + 1] = self.energy[i] + f64::from(x) * f64::from(x);
         }
+        let n = frame.len();
+        self.level = (self.energy[n] / n as f64).sqrt() as f32;
 
         let first = self.min_lag.saturating_sub(1).max(1);
         let last = self.max_lag + 1;

@@ -5,7 +5,7 @@
 
 import { FrameAccumulator } from './frame-accumulator.ts';
 import { PROCESSOR_NAME, type ProcessorMessage, type ProcessorOptions } from './messages.ts';
-import { WasmPitchDetector, instantiateTuner } from '../wasm/tuner.ts';
+import { WasmMonoTuner, instantiateTuner } from '../wasm/tuner.ts';
 
 // The AudioWorkletGlobalScope is not part of TypeScript's libs.
 declare class AudioWorkletProcessor {
@@ -19,7 +19,7 @@ declare function registerProcessor(
 declare const sampleRate: number;
 
 class TunerProcessor extends AudioWorkletProcessor {
-	#detector: WasmPitchDetector | null = null;
+	#tuner: WasmMonoTuner | null = null;
 	#frames: FrameAccumulator | null = null;
 
 	constructor(options: { processorOptions: ProcessorOptions }) {
@@ -27,9 +27,9 @@ class TunerProcessor extends AudioWorkletProcessor {
 		const { wasmBytes, hop } = options.processorOptions;
 		instantiateTuner(wasmBytes).then(
 			(exports) => {
-				this.#detector = new WasmPitchDetector(exports, sampleRate);
-				this.#frames = new FrameAccumulator(this.#detector.frameSize, hop);
-				this.#post({ type: 'ready', frameSize: this.#detector.frameSize });
+				this.#tuner = new WasmMonoTuner(exports, sampleRate, hop);
+				this.#frames = new FrameAccumulator(this.#tuner.frameSize, hop);
+				this.#post({ type: 'ready', frameSize: this.#tuner.frameSize });
 			},
 			(err: unknown) => this.#post({ type: 'error', message: String(err) })
 		);
@@ -37,10 +37,10 @@ class TunerProcessor extends AudioWorkletProcessor {
 
 	process(inputs: Float32Array[][]): boolean {
 		const channel = inputs[0]?.[0];
-		const detector = this.#detector;
-		if (channel && detector && this.#frames) {
+		const tuner = this.#tuner;
+		if (channel && tuner && this.#frames) {
 			this.#frames.push(channel, (frame) => {
-				this.#post({ type: 'pitch', reading: detector.detect(frame) });
+				this.#post({ type: 'track', reading: tuner.process(frame) });
 			});
 		}
 		return true;

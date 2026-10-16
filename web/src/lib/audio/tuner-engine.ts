@@ -4,7 +4,7 @@
 import { asset } from '$app/paths';
 import processorUrl from './tuner-processor.ts?worker&url';
 import { PROCESSOR_NAME, type ProcessorMessage, type ProcessorOptions } from './messages.ts';
-import { TUNER_WASM_PATH, type PitchReading } from '../wasm/tuner.ts';
+import { TUNER_WASM_PATH, type TrackReading } from '../wasm/tuner.ts';
 
 let bytes: Promise<ArrayBuffer> | undefined;
 
@@ -30,7 +30,7 @@ export interface TunerEngine {
 }
 
 export interface TunerEngineEvents {
-	onReading(reading: PitchReading | null): void;
+	onReading(reading: TrackReading): void;
 	onError?(message: string): void;
 }
 
@@ -58,7 +58,7 @@ export async function startTuner(events: TunerEngineEvents): Promise<TunerEngine
 			processorOptions
 		});
 		node.port.onmessage = ({ data }: MessageEvent<ProcessorMessage>) => {
-			if (data.type === 'pitch') events.onReading(data.reading);
+			if (data.type === 'track') events.onReading(data.reading);
 			else if (data.type === 'error') events.onError?.(data.message);
 		};
 

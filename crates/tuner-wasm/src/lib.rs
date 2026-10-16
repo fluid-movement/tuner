@@ -2,19 +2,19 @@
 //! inside an AudioWorkletGlobalScope, which lacks the APIs its JS glue needs,
 //! so the worklet instantiates the bytes directly and calls these functions.
 //!
-//! Usage from JS: `tuner_new(sampleRate)` returns a handle; write
-//! `tuner_frame_size(handle)` samples as `f32` at `tuner_input(handle)` in
-//! linear memory, call `tuner_detect(handle)`, and if it returns 1 read
-//! `tuner_frequency(handle)` and `tuner_clarity(handle)`.
+//! Usage from JS: `tuner_new(sampleRate, hop)` returns a handle; every `hop`
+//! samples write the latest `tuner_frame_size(handle)` samples as `f32` at
+//! `tuner_input(handle)` in linear memory, call `tuner_process(handle)` (the
+//! display state) and read `tuner_frequency(handle)` and the other getters.
 
 use tuner_core::tuning::cents_between;
-use tuner_core::{Instrument, Note, PitchConfig, PitchDetector, PitchEstimate};
+use tuner_core::{Instrument, MonoTuner, Note, TrackerOutput};
 
 /// Detector state behind a handle owned by JS.
 pub struct Tuner {
-    detector: PitchDetector,
+    mono: MonoTuner,
     input: Vec<f32>,
-    last: Option<PitchEstimate>,
+    last: Option<TrackerOutput>,
 }
 
 /// Returns [`tuner_core::VERSION`].
@@ -79,14 +79,14 @@ pub extern "C" fn tuner_cents_between(frequency: f32, reference: f32) -> f32 {
     cents_between(frequency, reference)
 }
 
-/// Creates a detector with the default configuration for `sample_rate`.
-/// Release it with [`tuner_free`].
+/// Creates a single-string tuner (detector + note tracker) for frames taken
+/// every `hop` samples at `sample_rate`. Release it with [`tuner_free`].
 #[unsafe(no_mangle)]
-pub extern "C" fn tuner_new(sample_rate: f32) -> *mut Tuner {
-    let detector = PitchDetector::new(PitchConfig::new(sample_rate));
-    let input = vec![0.0; detector.config().frame_size];
+pub extern "C" fn tuner_new(sample_rate: f32, hop: u32) -> *mut Tuner {
+    let mono = MonoTuner::new(sample_rate, hop as usize);
+    let input = vec![0.0; mono.frame_size()];
     Box::into_raw(Box::new(Tuner {
-        detector,
+        mono,
         input,
         last: None,
     }))
@@ -102,7 +102,7 @@ pub unsafe extern "C" fn tuner_free(tuner: *mut Tuner) {
     }
 }
 
-/// Number of samples [`tuner_detect`] analyses.
+/// Number of samples [`tuner_process`] analyses.
 ///
 /// # Safety
 ///
@@ -122,36 +122,94 @@ pub unsafe extern "C" fn tuner_input(tuner: *mut Tuner) -> *mut f32 {
     unsafe { &mut *tuner }.input.as_mut_ptr()
 }
 
-/// Analyses the input frame. Returns 1 if a pitch was found, else 0.
+/// Analyses the input frame (call once per hop). Returns the display state:
+/// 0 idle, 1 tracking, 2 holding. Read the details with the getters below.
 ///
 /// # Safety
 ///
 /// `tuner` must be a live handle from [`tuner_new`].
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn tuner_detect(tuner: *mut Tuner) -> u32 {
+pub unsafe extern "C" fn tuner_process(tuner: *mut Tuner) -> u32 {
     let tuner = unsafe { &mut *tuner };
-    tuner.last = tuner.detector.detect(&tuner.input);
-    tuner.last.is_some() as u32
+    let out = tuner.mono.process(&tuner.input);
+    tuner.last = Some(out);
+    out.state as u32
 }
 
-/// Frequency in Hz of the last detection, or 0 if none.
+/// Forgets the tracked note and the noise floor.
+///
+/// # Safety
+///
+/// `tuner` must be a live handle from [`tuner_new`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tuner_reset(tuner: *mut Tuner) {
+    let tuner = unsafe { &mut *tuner };
+    tuner.mono.reset();
+    tuner.last = None;
+}
+
+fn last(tuner: *const Tuner) -> Option<TrackerOutput> {
+    unsafe { &*tuner }.last
+}
+
+/// Smoothed frequency (Hz) of the tracked or held note, or 0.
 ///
 /// # Safety
 ///
 /// `tuner` must be a live handle from [`tuner_new`].
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn tuner_frequency(tuner: *const Tuner) -> f32 {
-    unsafe { &*tuner }.last.map_or(0.0, |e| e.frequency)
+    last(tuner).and_then(|o| o.frequency).unwrap_or(0.0)
 }
 
-/// Clarity (0..1) of the last detection, or 0 if none.
+/// This frame's raw detector frequency (Hz), or 0.
+///
+/// # Safety
+///
+/// `tuner` must be a live handle from [`tuner_new`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tuner_raw_frequency(tuner: *const Tuner) -> f32 {
+    last(tuner).and_then(|o| o.raw_frequency).unwrap_or(0.0)
+}
+
+/// This frame's clarity (0..1).
 ///
 /// # Safety
 ///
 /// `tuner` must be a live handle from [`tuner_new`].
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn tuner_clarity(tuner: *const Tuner) -> f32 {
-    unsafe { &*tuner }.last.map_or(0.0, |e| e.clarity)
+    last(tuner).map_or(0.0, |o| o.clarity)
+}
+
+/// This frame's level in dBFS (within the analysis band).
+///
+/// # Safety
+///
+/// `tuner` must be a live handle from [`tuner_new`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tuner_level_db(tuner: *const Tuner) -> f32 {
+    last(tuner).map_or(-120.0, |o| o.level_db)
+}
+
+/// Current noise floor estimate in dBFS.
+///
+/// # Safety
+///
+/// `tuner` must be a live handle from [`tuner_new`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tuner_floor_db(tuner: *const Tuner) -> f32 {
+    last(tuner).map_or(-120.0, |o| o.floor_db)
+}
+
+/// 1 if a note was locked onto (new or another string) on the last frame.
+///
+/// # Safety
+///
+/// `tuner` must be a live handle from [`tuner_new`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tuner_locked(tuner: *const Tuner) -> u32 {
+    last(tuner).is_some_and(|o| o.locked) as u32
 }
 
 #[cfg(test)]
@@ -187,24 +245,52 @@ mod tests {
     }
 
     #[test]
-    fn detects_through_the_c_abi() {
+    fn tracks_through_the_c_abi() {
         let rate = 48_000.0;
         unsafe {
-            let t = tuner_new(rate);
+            let t = tuner_new(rate, 1024);
             let n = tuner_frame_size(t) as usize;
             assert_eq!(n, 2048);
             let input = std::slice::from_raw_parts_mut(tuner_input(t), n);
-            for (i, x) in input.iter_mut().enumerate() {
-                *x = 0.4 * (TAU * 110.0 * i as f32 / rate).sin();
+            // Quiet room, then a steady tone.
+            input.fill(1e-4);
+            for _ in 0..5 {
+                assert_eq!(tuner_process(t), 0);
             }
-            assert_eq!(tuner_detect(t), 1);
-            assert!((tuner_frequency(t) - 110.0).abs() < 0.1);
+            assert!(tuner_floor_db(t) < -70.0);
+            for (i, x) in input.iter_mut().enumerate() {
+                *x = 0.1 * (TAU * 110.0 * i as f32 / rate).sin();
+            }
+            assert_eq!(tuner_process(t), 0, "a new note needs confirming");
+            assert_eq!(tuner_process(t), 1);
+            assert_eq!(tuner_locked(t), 1);
+            assert!(
+                (tuner_frequency(t) - 110.0).abs() < 0.1,
+                "{} {}",
+                tuner_frequency(t),
+                tuner_raw_frequency(t)
+            );
+            assert!((tuner_raw_frequency(t) - 110.0).abs() < 0.1);
             assert!(tuner_clarity(t) > 0.9);
+            assert!(tuner_level_db(t) > -30.0);
+            assert_eq!(tuner_process(t), 1);
+            assert_eq!(tuner_locked(t), 0);
 
-            input.fill(0.0);
-            assert_eq!(tuner_detect(t), 0);
+            // Silence: released into hold, still showing the note.
+            input.fill(1e-4);
+            let mut state = 1;
+            for _ in 0..20 {
+                state = tuner_process(t);
+            }
+            assert_eq!(state, 2);
+            assert!(
+                (tuner_frequency(t) - 110.0).abs() < 0.1,
+                "held {}",
+                tuner_frequency(t)
+            );
+
+            tuner_reset(t);
             assert_eq!(tuner_frequency(t), 0.0);
-            assert_eq!(tuner_clarity(t), 0.0);
             tuner_free(t);
         }
     }

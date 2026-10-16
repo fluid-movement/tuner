@@ -6,11 +6,18 @@
 		startTuner,
 		type TunerEngine
 	} from '#lib/audio/tuner-engine.ts';
-	import { INSTRUMENTS, Tunings, instantiateTuner, type Instrument } from '#lib/wasm/tuner.ts';
-	import { InTuneLatch, PitchSmoother } from '#lib/tuner/smoother.ts';
+	import {
+		INSTRUMENTS,
+		Tunings,
+		instantiateTuner,
+		type Instrument,
+		type TrackReading
+	} from '#lib/wasm/tuner.ts';
+	import { InTuneLatch } from '#lib/tuner/in-tune.ts';
 	import CentsMeter from '#lib/components/CentsMeter.svelte';
 	import StringRow from '#lib/components/StringRow.svelte';
 	import InstrumentToggle from '#lib/components/InstrumentToggle.svelte';
+	import LevelMeter from '#lib/components/LevelMeter.svelte';
 
 	const STORAGE_KEY = 'tuner.instrument';
 
@@ -19,18 +26,21 @@
 	let engine = $state<TunerEngine | null>(null);
 	let starting = $state(false);
 	let error = $state<string | null>(null);
-	/** Smoothed frequency, or null when nothing is heard. */
-	let frequency = $state<number | null>(null);
+	/** Latest output of the note tracker (smoothed, held), or null. */
+	let reading = $state<TrackReading | null>(null);
+	let debug = $state(false);
 
-	const smoother = new PitchSmoother();
 	const latch = new InTuneLatch();
 
+	let frequency = $derived(reading?.frequency ?? null);
+	let holding = $derived(reading?.state === 'holding');
 	let strings = $derived(tunings?.strings(instrument) ?? []);
 	let target = $derived(frequency && tunings ? tunings.nearest(instrument, frequency) : null);
 	let note = $derived(frequency && tunings ? tunings.note(frequency) : null);
 	let inTune = $derived(latch.update(target?.cents ?? null));
 
 	onMount(async () => {
+		debug = new URLSearchParams(location.search).has('debug');
 		try {
 			const saved = localStorage.getItem(STORAGE_KEY);
 			if (INSTRUMENTS.includes(saved as Instrument)) instrument = saved as Instrument;
@@ -57,7 +67,7 @@
 		error = null;
 		try {
 			engine = await startTuner({
-				onReading: (r) => (frequency = smoother.push(r?.frequency ?? null, performance.now())),
+				onReading: (r) => (reading = r),
 				onError: (message) => (error = message)
 			});
 		} catch (err) {
@@ -70,8 +80,7 @@
 	async function stop() {
 		await engine?.stop();
 		engine = null;
-		smoother.reset();
-		frequency = null;
+		reading = null;
 	}
 
 	onDestroy(() => engine?.stop());
@@ -102,7 +111,7 @@
 	</header>
 
 	<main>
-		<section class="readout" aria-live="polite">
+		<section class="readout" class:holding aria-live="polite">
 			<div class="note" class:in-tune={inTune}>
 				{#if note}
 					<span data-testid="note"
@@ -112,7 +121,10 @@
 					<span class="placeholder">–</span>
 				{/if}
 			</div>
-			<p class="status" data-testid="status" class:in-tune={inTune}>{status}</p>
+			<p class="status" data-testid="status" class:in-tune={inTune}>
+				{status}
+				{#if holding}<span class="hold" data-testid="hold">Hold</span>{/if}
+			</p>
 			<CentsMeter cents={target?.cents ?? null} {inTune} />
 			<p class="numbers">
 				{#if target && frequency}
@@ -126,6 +138,25 @@
 		</section>
 
 		<StringRow {strings} active={target?.string.index ?? null} {inTune} />
+
+		{#if engine}
+			<LevelMeter levelDb={reading?.levelDb ?? null} floorDb={reading?.floorDb ?? null} />
+		{/if}
+
+		{#if debug && reading}
+			<dl class="debug" data-testid="debug">
+				<dt>state</dt>
+				<dd>{reading.state}{reading.locked ? ' (locked)' : ''}</dd>
+				<dt>raw</dt>
+				<dd>{reading.rawFrequency?.toFixed(2) ?? '–'} Hz</dd>
+				<dt>clarity</dt>
+				<dd>{reading.clarity.toFixed(2)}</dd>
+				<dt>level</dt>
+				<dd>{reading.levelDb.toFixed(1)} dBFS</dd>
+				<dt>floor</dt>
+				<dd>{reading.floorDb.toFixed(1)} dBFS</dd>
+			</dl>
+		{/if}
 	</main>
 
 	<footer>
@@ -170,6 +201,7 @@
 		gap: 24px;
 	}
 	.readout {
+		transition: opacity 200ms;
 		background: var(--surface);
 		border: 1px solid var(--line);
 		border-radius: var(--radius);
@@ -201,6 +233,32 @@
 	}
 	.status.in-tune {
 		color: var(--in-tune);
+	}
+	/* The string has faded: keep the last reading, visibly older. */
+	.readout.holding {
+		opacity: 0.55;
+	}
+	.hold {
+		margin-left: 6px;
+		padding: 1px 6px;
+		border: 1px solid currentColor;
+		border-radius: 4px;
+		font-size: 0.75rem;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+	}
+	.debug {
+		display: grid;
+		grid-template-columns: auto 1fr;
+		gap: 2px 12px;
+		margin: 0;
+		font:
+			0.8rem ui-monospace,
+			monospace;
+		color: var(--muted);
+	}
+	.debug dd {
+		margin: 0;
 	}
 	.numbers {
 		margin: 8px 0 0;

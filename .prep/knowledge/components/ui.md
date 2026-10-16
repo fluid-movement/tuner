@@ -19,10 +19,11 @@ Plain Svelte 5 (runes) and CSS; no UI library. Imports use the `#lib/...` alias 
 - `CentsMeter.svelte`: SVG arc for −50..+50 cents over ±60°, ticks every 10 cents, a ±5-cent in-tune zone, and a needle rotated with a short CSS transition (disabled under `prefers-reduced-motion`). Props: `cents` (null = idle), `inTune`.
 - `StringRow.svelte`: the instrument's strings as pills in string order; the active one has `aria-current="true"` and turns solid green when in tune. Each pill has `data-testid="string-<name>"`.
 - `InstrumentToggle.svelte`: a segmented radio group (`bind:value`), visually hidden inputs with a focus ring on the label.
+- `LevelMeter.svelte`: `role="meter"` bar of `levelDb − floorDb` over 0–40 dB, with a mark at the 12 dB onset margin; turns accent-coloured above it. Props: `levelDb`, `floorDb`.
 
 ## Page state (`+page.svelte`)
 
-`$state`: instrument, `Tunings` (instantiated on mount from the shared wasm bytes), engine, error, smoothed frequency. `$derived`: strings, nearest target and cents, note, in-tune (via `InTuneLatch`), status text. Readings from the engine go through `PitchSmoother` before touching state. Use `$state<T | null>(null)` with an explicit type, or TypeScript narrows the variable to `never`.
+`$state`: instrument, `Tunings` (instantiated on mount from the shared wasm bytes), engine, error, the latest `TrackReading` from the engine, `debug` (from `?debug`, read in `onMount` because the page is prerendered and `url.searchParams` is unavailable then). `$derived`: frequency and `holding` from the reading, strings, nearest target and cents, note, in-tune (via `InTuneLatch`), status text. While holding, the readout section gets the `holding` class (opacity 0.55) and a "Hold" badge. Use `$state<T | null>(null)` with an explicit type, or TypeScript narrows the variable to `never`.
 
 ## Styling
 
