@@ -1,3 +1,11 @@
+---
+type: finding
+title: "Findings: Research polyphonic analysis for strummed chords"
+description: "Findings: Research polyphonic analysis for strummed chords"
+date: "2026-10-15"
+issue: 01M509SBVQFQ26T79APJR7NNPK
+---
+
 ## Answer
 
 Use **target-aware spectral analysis with collision resolution** ("resolved", `tuner_core::poly::estimate_resolved`):

@@ -1,3 +1,11 @@
+---
+type: finding
+title: "Findings: Survey the project into a knowledge map"
+description: "Findings: Survey the project into a knowledge map"
+date: "2026-10-15"
+issue: 01M509K5C9ANY25QH255QYJTP6
+---
+
 ## Project
 
 A browser-based tuner for stringed instruments, mainly acoustic guitar and ukulele. Pitch analysis runs in a Rust core compiled to WebAssembly, so the DSP can go well beyond what a plain JS tuner does. Iteration 1 is a classic single-string tuner: one note at a time, nearest target string, cents deviation. The end goal is polyphonic: strum all strings at once and see which are in tune and which need tuning, with the instrument (guitar or ukulele) recognised automatically from the frequencies present. Standard tunings only for now (guitar E2 A2 D3 G3 B3 E4; ukulele re-entrant G4 C4 E4 A4); alternate tunings later.

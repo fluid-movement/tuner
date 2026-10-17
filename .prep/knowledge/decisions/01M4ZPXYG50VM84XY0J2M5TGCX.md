@@ -1,5 +1,10 @@
-## D1: WASM bytes passed via processorOptions; Playwright on system Chrome with fake mic
-date: 2026-10-15
+---
+type: decision
+title: "WASM bytes passed via processorOptions; Playwright on system Chrome with fake mic"
+description: "WASM bytes passed via processorOptions; Playwright on system Chrome with fake mic"
+date: "2026-10-15"
+issue: 01M509SB9NVQNZH4PQ2TGP8T1J
+---
 
 The worklet cannot fetch, so the main thread fetches tuner.wasm and passes the ArrayBuffer in processorOptions; the worklet instantiates it asynchronously and posts `ready`. Analysis runs every 1024 samples (~21 ms at 48 kHz) on a 2048-sample window; detection costs ~1–2 ms, inside process(), which is fine because the node's output is silent.
 
