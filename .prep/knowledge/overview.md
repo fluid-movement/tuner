@@ -12,16 +12,20 @@ A browser-based tuner for stringed instruments, mainly acoustic guitar and ukule
 
 ## Architecture
 
-- `crates/tuner-core`: pure Rust DSP, tested natively with synthetic signals. See [Pitch core](/components/pitch-core.md), [Note tracker](/components/note-tracker.md) (what the display shows over a pluck's life), [Pitch, notes and tunings](/conventions/pitch-and-tunings.md) and, for strums, [Polyphonic string estimation](/components/poly-estimation.md). Depends only on `rustfft`.
+The architecture choice is recorded in [Stack: SvelteKit + Rust/WASM in an AudioWorklet, static PWA](/decisions/01M4ZPXYG12WVJMAHKVGWTN0ME.md); the PWA part remains planned.
+
+- `crates/tuner-core`: pure Rust DSP, tested natively with synthetic signals. See [Pitch core](/components/pitch-core.md), [Note tracker](/components/note-tracker.md) (what the display shows over a pluck's life), [Pitch, notes and tunings](/conventions/pitch-and-tunings.md) and, for strums, [Polyphonic string estimation](/components/poly-estimation.md). Depends only on `num-complex`; the FFT is implemented in the core.
 - `crates/tuner-wasm`: raw C-ABI WASM exports of the core, with no JS imports.
 - `crates/tuner-lab`: native CLI that checks the core against real recordings (`just analyze`). See [Recording analysis](/components/tuner-lab.md).
-- `web/`: SvelteKit 3 app (Vite, static adapter, pnpm), shipped as an installable offline PWA. See [UI](/components/ui.md) and [Single-string tuner](/features/single-string-tuner.md).
+- `web/`: SvelteKit 3 app (Vite, static adapter, pnpm), built as a prerendered static site; installable/offline PWA support is planned. See [UI](/components/ui.md) and [Single-string tuner](/features/single-string-tuner.md).
 
 Audio flows microphone → `getUserMedia` → AudioWorkletProcessor hosting the WASM module (detection and note tracking off the main thread) → results posted over the worklet port → Svelte UI. See [Audio pipeline](/components/audio-pipeline.md) and [WASM inside an AudioWorklet](/pitfalls/audioworklet-wasm.md).
 
 ## Running
 
 The root `justfile` is the entry point: `just dev` installs the wasm target and web dependencies, builds the wasm and starts Vite; `just check` runs fmt/clippy, svelte-check/eslint/prettier, Rust and Vitest unit tests, the production build and the Playwright browser tests. `just --list` shows the rest. Production is a Docker image deployed on Coolify; see [Deployment](/conventions/deployment.md).
+
+See [Build and tooling](/conventions/build-and-tooling.md) for workspace, versions and build paths, and [Testing](/conventions/testing.md) for test layers, diagnostic examples and commands.
 
 ## Roadmap
 
