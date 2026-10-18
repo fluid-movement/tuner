@@ -2,9 +2,9 @@
 //! strings and the instrument's tuning targets, estimate each string's
 //! fundamental. Research prototype; see the strum research issue findings.
 
+use crate::fft::Fft;
 use crate::tuning::{Instrument, StringTarget, cents_between};
-use rustfft::FftPlanner;
-use rustfft::num_complex::{Complex32, Complex64};
+use num_complex::{Complex32, Complex64};
 
 /// Blackman–Harris (4-term) coefficients: `w[n] = Σ c_m cos(2π m n / (N−1))`.
 const BH: [f64; 4] = [0.358_75, -0.488_29, 0.141_28, -0.011_68];
@@ -22,7 +22,24 @@ pub struct StringEstimate {
     /// Inharmonicity coefficient fitted from the string's partials, or the
     /// configured default when it could not be fitted.
     pub inharmonicity: f32,
+    /// Set by [`estimate_strum`] for strings with clean partials: the second
+    /// largest, over those partials not shared with another string's
+    /// estimated partials, of how far the peak stands above the median
+    /// spectrum around it (outside the window's main lobe, out to a
+    /// semitone), in dB. A sounding string makes real peaks there; a silent
+    /// one only has other strings' peaks, which are excluded.
+    pub prominence_db: Option<f32>,
+    /// Set by [`estimate_strum`]: whether the string was played, judged from
+    /// `prominence_db` against [`PRESENT_PROMINENCE_DB`]. `None` for strings
+    /// without clean partials (guitar B3 and E4), whose partials all coincide
+    /// with other strings' and so can't be judged on their own.
+    pub present: Option<bool>,
 }
+
+/// A string with clean partials counts as played when its prominence is at
+/// least this (played strings measure ≥ 39 dB, muted ones ≤ ~10 dB on
+/// synthetic strums; see `examples/presence_eval.rs`).
+pub const PRESENT_PROMINENCE_DB: f32 = 20.0;
 
 /// Spectrum of a Blackman–Harris windowed, zero-padded frame.
 pub struct Spectrum {
@@ -51,7 +68,7 @@ impl Spectrum {
                 .sum();
             *b = Complex32::new(x * w as f32, 0.0);
         }
-        FftPlanner::new().plan_fft_forward(size).process(&mut buf);
+        Fft::new(size).forward(&mut buf);
         buf.truncate(size / 2);
         let db = buf
             .iter()
@@ -237,6 +254,8 @@ fn comb(
                 cents: cents_between(frequency, t.frequency),
                 level_db: top - peak,
                 inharmonicity,
+                prominence_db: None,
+                present: None,
             })
         })
         .collect()
@@ -487,10 +506,21 @@ pub fn estimate_resolved(
     instrument: Instrument,
     config: &PolyConfig,
 ) -> Vec<Option<StringEstimate>> {
-    let spectrum = Spectrum::new(frame, config.sample_rate, 2);
+    resolve(
+        &Spectrum::new(frame, config.sample_rate, 2),
+        instrument,
+        config,
+    )
+}
+
+fn resolve(
+    spectrum: &Spectrum,
+    instrument: Instrument,
+    config: &PolyConfig,
+) -> Vec<Option<StringEstimate>> {
     let targets = instrument.strings();
     let clean = clean_partials(targets, config);
-    let mut estimates = comb(&spectrum, targets, &clean, config);
+    let mut estimates = comb(spectrum, targets, &clean, config);
     let b = config.inharmonicity as f64;
     let peak = spectrum.db.iter().copied().fold(f32::MIN, f32::max);
 
@@ -532,8 +562,8 @@ pub fn estimate_resolved(
             // (residual, frequency, energy explained beyond the known partials)
             let mut best = (f64::MAX, centre, 0.0f64);
             for &d in &[0.0, 1.5, 4.0] {
-                let fit = BandFit::new(&spectrum, lo, hi, &known_hz, d);
-                let try_at = |cents: f64| fit.with(&kernel_row(&spectrum, lo, hi, at(cents), d));
+                let fit = BandFit::new(spectrum, lo, hi, &known_hz, d);
+                let try_at = |cents: f64| fit.with(&kernel_row(spectrum, lo, hi, at(cents), d));
                 // Coarse 2-cent grid, then 0.25-cent steps around each of the
                 // three lowest local minima (the residual can have several).
                 let search = config.search_cents as f64;
@@ -572,9 +602,86 @@ pub fn estimate_resolved(
                 cents: cents_between(frequency, targets[u].frequency),
                 level_db: top - peak,
                 inharmonicity: config.inharmonicity,
+                prominence_db: None,
+                present: None,
             });
         }
         known.push(u);
+    }
+    estimates
+}
+
+/// [`estimate_resolved`] on `frame` (the analysis window after a strum),
+/// plus [`StringEstimate::prominence_db`] and [`StringEstimate::present`]:
+/// whether each string with clean partials was actually played.
+pub fn estimate_strum(
+    frame: &[f32],
+    instrument: Instrument,
+    config: &PolyConfig,
+) -> Vec<Option<StringEstimate>> {
+    let spectrum = Spectrum::new(frame, config.sample_rate, 2);
+    let mut estimates = resolve(&spectrum, instrument, config);
+    let clean = clean_partials(instrument.strings(), config);
+    // Every estimated partial of every string, to tell which peaks another
+    // string already explains.
+    let all_partials: Vec<(usize, f32)> = estimates
+        .iter()
+        .enumerate()
+        .filter_map(|(i, e)| e.map(|e| (i, e)))
+        .flat_map(|(i, e)| {
+            (1..=config.partials * 4).map(move |m| (i, partial(e.frequency, m, e.inharmonicity)))
+        })
+        .collect();
+    // Within the Blackman–Harris main lobe (±4 bins of the analysed length)
+    // two partials are one peak.
+    let lobe_hz = 4.0 * config.sample_rate / frame.len() as f32;
+    let lobe_bins = (lobe_hz / spectrum.bin_hz).ceil() as usize + 1;
+    let peak_db = |hz: f32| {
+        let lo = (hz * 2f32.powf(-15.0 / 1200.0) / spectrum.bin_hz).floor() as usize;
+        let hi = ((hz * 2f32.powf(15.0 / 1200.0) / spectrum.bin_hz).ceil() as usize)
+            .min(spectrum.db.len() - 1);
+        (lo..=hi).map(|i| spectrum.db[i]).fold(f32::MIN, f32::max)
+    };
+    for (index, (est, clean)) in estimates.iter_mut().zip(&clean).enumerate() {
+        let Some(e) = est else { continue };
+        if !clean.iter().any(|&c| c) {
+            continue;
+        }
+        let explained_elsewhere = |hz: f32| {
+            all_partials
+                .iter()
+                .any(|&(j, other)| j != index && (other - hz).abs() <= lobe_hz)
+        };
+        let mut prominences: Vec<f32> = (1..=config.partials)
+            .filter(|&n| clean[n as usize - 1])
+            .map(|n| partial(e.frequency, n, e.inharmonicity))
+            .filter(|&hz| !explained_elsewhere(hz))
+            .map(|hz| {
+                let centre = (hz / spectrum.bin_hz).round() as usize;
+                // Background: beyond the window's main lobe, out to a
+                // semitone or two lobes, whichever is wider.
+                let reach = ((hz * (2f32.powf(100.0 / 1200.0) - 1.0)) / spectrum.bin_hz)
+                    .ceil()
+                    .max(2.0 * lobe_bins as f32) as usize;
+                let mut around: Vec<f32> = (centre.saturating_sub(reach)..=centre + reach)
+                    .filter(|&i| i.abs_diff(centre) > lobe_bins && i < spectrum.db.len())
+                    .map(|i| spectrum.db[i])
+                    .collect();
+                around.sort_by(f32::total_cmp);
+                peak_db(hz) - around.get(around.len() / 2).copied().unwrap_or(f32::MAX)
+            })
+            .collect();
+        // The second strongest: pluck-position nulls can silence one partial
+        // of a played string, while a muted string's estimate rarely lines up
+        // with two foreign peaks.
+        prominences.sort_by(|a, b| b.total_cmp(a));
+        let prominence = prominences
+            .get(1)
+            .or(prominences.first())
+            .copied()
+            .unwrap_or(0.0);
+        e.prominence_db = Some(prominence);
+        e.present = Some(prominence >= PRESENT_PROMINENCE_DB);
     }
     estimates
 }
@@ -658,6 +765,51 @@ mod tests {
             "E4 at {:+.2} cents",
             e4.cents
         );
+    }
+
+    #[test]
+    fn muted_strings_are_not_present() {
+        use crate::synth::{Rng, StrumOptions, highpass, random_strum, render};
+        let rate = 48_000.0;
+        for (instrument, muted) in [
+            (Instrument::Guitar, 2usize), // D3
+            (Instrument::Guitar, 0),      // E2
+            (Instrument::Ukulele, 1),     // C4
+        ] {
+            let mut rng = Rng::new(7 + muted as u64);
+            let opts = StrumOptions {
+                max_detune_cents: 10.0,
+                ..StrumOptions::for_instrument(instrument)
+            };
+            let mut strum = random_strum(instrument, &opts, &mut rng);
+            strum[muted].level = 0.0;
+            let last = strum.iter().map(|s| s.onset).fold(0.0, f32::max);
+            let mut x = render(&strum, rate, last + 0.9, 0.002, &mut rng);
+            highpass(&mut x, 100.0, rate);
+            let start = ((last + 0.08) * rate) as usize;
+            let est = estimate_strum(
+                &x[start..start + 32_768],
+                instrument,
+                &PolyConfig::new(rate, instrument),
+            );
+            for (i, e) in est.iter().enumerate() {
+                let e = e.expect("estimate");
+                let expected =
+                    if clean_partials(instrument.strings(), &PolyConfig::new(rate, instrument))[i]
+                        .iter()
+                        .any(|&c| c)
+                    {
+                        Some(i != muted)
+                    } else {
+                        None
+                    };
+                assert_eq!(
+                    e.present, expected,
+                    "{instrument:?} string {i} (muted {muted}): {:?}",
+                    e.prominence_db
+                );
+            }
+        }
     }
 
     #[test]

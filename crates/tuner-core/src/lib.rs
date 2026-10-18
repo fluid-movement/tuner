@@ -1,6 +1,7 @@
 //! Pitch analysis for the tuner. Pure Rust with no web dependencies, so it
 //! can be tested natively and wrapped for WASM by `tuner-wasm`.
 
+pub mod fft;
 pub mod pitch;
 pub mod poly;
 pub mod synth;
