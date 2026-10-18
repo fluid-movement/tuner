@@ -4,7 +4,13 @@
 // module's bytes arrive in processorOptions.
 
 import { FrameAccumulator } from './frame-accumulator.ts';
-import { PROCESSOR_NAME, type ProcessorMessage, type ProcessorOptions } from './messages.ts';
+import {
+	PROCESSOR_NAME,
+	STRUM_CHUNK,
+	type ProcessorControl,
+	type ProcessorMessage,
+	type ProcessorOptions
+} from './messages.ts';
 import { WasmMonoTuner, instantiateTuner } from '../wasm/tuner.ts';
 
 // The AudioWorkletGlobalScope is not part of TypeScript's libs.
@@ -21,10 +27,16 @@ declare const sampleRate: number;
 class TunerProcessor extends AudioWorkletProcessor {
 	#tuner: WasmMonoTuner | null = null;
 	#frames: FrameAccumulator | null = null;
+	/** Forwards raw audio to the strum worker while strum mode is on. */
+	#strumPort: MessagePort | null = null;
+	readonly #strumChunks = new FrameAccumulator(STRUM_CHUNK, STRUM_CHUNK);
 
 	constructor(options: { processorOptions: ProcessorOptions }) {
 		super(options);
 		const { wasmBytes, hop } = options.processorOptions;
+		this.port.onmessage = ({ data }: MessageEvent<ProcessorControl>) => {
+			if (data.type === 'strum-port') this.#strumPort = data.port;
+		};
 		instantiateTuner(wasmBytes).then(
 			(exports) => {
 				this.#tuner = new WasmMonoTuner(exports, sampleRate, hop);
@@ -37,6 +49,11 @@ class TunerProcessor extends AudioWorkletProcessor {
 
 	process(inputs: Float32Array[][]): boolean {
 		const channel = inputs[0]?.[0];
+		const strumPort = this.#strumPort;
+		if (channel && strumPort) {
+			// The worker does the analysis; here we only copy and post.
+			this.#strumChunks.push(channel, (chunk) => strumPort.postMessage(chunk.slice()));
+		}
 		const tuner = this.#tuner;
 		if (channel && tuner && this.#frames) {
 			this.#frames.push(channel, (frame) => {

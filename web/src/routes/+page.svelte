@@ -11,17 +11,33 @@
 		Tunings,
 		instantiateTuner,
 		type Instrument,
+		type StrumReport,
 		type TrackReading
 	} from '#lib/wasm/tuner.ts';
 	import { InTuneLatch } from '#lib/tuner/in-tune.ts';
 	import CentsMeter from '#lib/components/CentsMeter.svelte';
 	import StringRow from '#lib/components/StringRow.svelte';
-	import InstrumentToggle from '#lib/components/InstrumentToggle.svelte';
+	import Segmented from '#lib/components/Segmented.svelte';
+	import StrumView from '#lib/components/StrumView.svelte';
 	import LevelMeter from '#lib/components/LevelMeter.svelte';
 
+	type Mode = 'string' | 'strum';
 	const STORAGE_KEY = 'tuner.instrument';
+	const MODE_KEY = 'tuner.mode';
+	const INSTRUMENT_OPTIONS = [
+		{ value: 'guitar', label: 'Guitar' },
+		{ value: 'ukulele', label: 'Ukulele' }
+	] as const;
+	const MODE_OPTIONS = [
+		{ value: 'string', label: 'String' },
+		{ value: 'strum', label: 'Strum' }
+	] as const;
 
 	let instrument = $state<Instrument>('guitar');
+	let mode = $state<Mode>('string');
+	/** Last strum report (kept until the next strum) and when it arrived. */
+	let strum = $state<{ report: StrumReport; at: number } | null>(null);
+	let now = $state(0);
 	let tunings = $state<Tunings | null>(null);
 	let engine = $state<TunerEngine | null>(null);
 	let starting = $state(false);
@@ -44,6 +60,8 @@
 		try {
 			const saved = localStorage.getItem(STORAGE_KEY);
 			if (INSTRUMENTS.includes(saved as Instrument)) instrument = saved as Instrument;
+			const savedMode = localStorage.getItem(MODE_KEY);
+			if (savedMode === 'string' || savedMode === 'strum') mode = savedMode;
 		} catch {
 			// Storage may be unavailable (private mode); the default is fine.
 		}
@@ -57,9 +75,26 @@
 	$effect(() => {
 		try {
 			localStorage.setItem(STORAGE_KEY, instrument);
+			localStorage.setItem(MODE_KEY, mode);
 		} catch {
 			// Not remembering the choice is acceptable.
 		}
+	});
+
+	// The strum check runs only in strum mode, for the selected instrument;
+	// results for another instrument don't apply.
+	$effect(() => {
+		const wanted = mode === 'strum' ? instrument : null;
+		strum = null;
+		engine?.setStrum(wanted).catch((err) => (error = describeStartError(err)));
+	});
+
+	// Ticks the "last strum" age.
+	$effect(() => {
+		if (!strum) return;
+		now = performance.now();
+		const timer = setInterval(() => (now = performance.now()), 1000);
+		return () => clearInterval(timer);
 	});
 
 	async function start() {
@@ -68,6 +103,7 @@
 		try {
 			engine = await startTuner({
 				onReading: (r) => (reading = r),
+				onStrum: (report) => (strum = { report, at: performance.now() }),
 				onError: (message) => (error = message)
 			});
 		} catch (err) {
@@ -81,6 +117,7 @@
 		await engine?.stop();
 		engine = null;
 		reading = null;
+		strum = null;
 	}
 
 	onDestroy(() => engine?.stop());
@@ -107,37 +144,49 @@
 <div class="app">
 	<header>
 		<h1>Tuner</h1>
-		<InstrumentToggle bind:value={instrument} />
+		<Segmented label="Mode" options={MODE_OPTIONS} bind:value={mode} />
 	</header>
+	<div class="instrument">
+		<Segmented label="Instrument" options={INSTRUMENT_OPTIONS} bind:value={instrument} />
+	</div>
 
 	<main>
-		<section class="readout" class:holding aria-live="polite">
-			<div class="note" class:in-tune={inTune}>
-				{#if note}
-					<span data-testid="note"
-						>{note.name.replace(/-?\d+$/, '')}<sub>{note.name.match(/-?\d+$/)?.[0]}</sub></span
-					>
-				{:else}
-					<span class="placeholder">–</span>
-				{/if}
-			</div>
-			<p class="status" data-testid="status" class:in-tune={inTune}>
-				{status}
-				{#if holding}<span class="hold" data-testid="hold">Hold</span>{/if}
-			</p>
-			<CentsMeter cents={target?.cents ?? null} {inTune} />
-			<p class="numbers">
-				{#if target && frequency}
-					<span data-testid="cents">{fmtCents(target.cents)} cents</span>
-					<span class="sep">·</span>
-					<span data-testid="frequency">{frequency.toFixed(2)} Hz</span>
-				{:else}
-					&nbsp;
-				{/if}
-			</p>
-		</section>
+		{#if mode === 'strum'}
+			<StrumView
+				{strings}
+				report={strum?.report ?? null}
+				age={strum ? Math.max(0, (now - strum.at) / 1000) : null}
+				listening={engine !== null}
+			/>
+		{:else}
+			<section class="readout" class:holding aria-live="polite">
+				<div class="note" class:in-tune={inTune}>
+					{#if note}
+						<span data-testid="note"
+							>{note.name.replace(/-?\d+$/, '')}<sub>{note.name.match(/-?\d+$/)?.[0]}</sub></span
+						>
+					{:else}
+						<span class="placeholder">–</span>
+					{/if}
+				</div>
+				<p class="status" data-testid="status" class:in-tune={inTune}>
+					{status}
+					{#if holding}<span class="hold" data-testid="hold">Hold</span>{/if}
+				</p>
+				<CentsMeter cents={target?.cents ?? null} {inTune} />
+				<p class="numbers">
+					{#if target && frequency}
+						<span data-testid="cents">{fmtCents(target.cents)} cents</span>
+						<span class="sep">·</span>
+						<span data-testid="frequency">{frequency.toFixed(2)} Hz</span>
+					{:else}
+						&nbsp;
+					{/if}
+				</p>
+			</section>
 
-		<StringRow {strings} active={target?.string.index ?? null} {inTune} />
+			<StringRow {strings} active={target?.string.index ?? null} {inTune} />
+		{/if}
 
 		{#if engine}
 			<LevelMeter levelDb={reading?.levelDb ?? null} floorDb={reading?.floorDb ?? null} />
@@ -182,6 +231,10 @@
 		display: flex;
 		flex-direction: column;
 		gap: 20px;
+	}
+	.instrument {
+		display: flex;
+		justify-content: center;
 	}
 	header {
 		display: flex;

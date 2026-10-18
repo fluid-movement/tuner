@@ -73,6 +73,34 @@ export function writePluckWav(
 	writeSamples(path, samples, rate);
 }
 
+/**
+ * Writes a mono WAV of one strum (strings low to high, 15 ms apart), then
+ * decay until `period` seconds, so the looping fake microphone re-strums it.
+ * A `null` frequency is a muted string (not played at all).
+ */
+export function writeStrumWav(
+	path: string,
+	frequencies: (number | null)[],
+	{ period = 3, level = 0.05, decay = 1.2, rate = 48_000 } = {}
+) {
+	const n = Math.round(period * rate);
+	const samples = new Float32Array(n);
+	frequencies.forEach((frequency, k) => {
+		if (frequency === null) return;
+		const start = Math.round((0.01 + 0.015 * k) * rate);
+		const tauString = decay * (110 / frequency) ** 0.4;
+		for (let h = 1; h <= 10; h++) {
+			const amp = level / h ** 0.9;
+			const tau = tauString / (1 + 0.35 * (h - 1));
+			for (let i = start; i < n; i++) {
+				const t = (i - start) / rate;
+				samples[i] += amp * Math.exp(-t / tau) * Math.sin(2 * Math.PI * frequency * h * t);
+			}
+		}
+	});
+	writeSamples(path, samples, rate);
+}
+
 function writeSamples(path: string, samples: Float32Array, rate: number) {
 	const data = Buffer.alloc(samples.length * 2);
 	samples.forEach((v, i) =>

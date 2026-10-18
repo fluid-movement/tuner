@@ -3,8 +3,20 @@
 
 import { asset } from '$app/paths';
 import processorUrl from './tuner-processor.ts?worker&url';
-import { PROCESSOR_NAME, type ProcessorMessage, type ProcessorOptions } from './messages.ts';
-import { TUNER_WASM_PATH, type TrackReading } from '../wasm/tuner.ts';
+import {
+	PROCESSOR_NAME,
+	type ProcessorControl,
+	type ProcessorMessage,
+	type ProcessorOptions,
+	type StrumWorkerControl,
+	type StrumWorkerMessage
+} from './messages.ts';
+import {
+	TUNER_WASM_PATH,
+	type Instrument,
+	type StrumReport,
+	type TrackReading
+} from '../wasm/tuner.ts';
 
 let bytes: Promise<ArrayBuffer> | undefined;
 
@@ -26,11 +38,17 @@ const HOP = 1024;
 
 export interface TunerEngine {
 	readonly sampleRate: number;
+	/**
+	 * Turns the strum check on for `instrument` (or switches its instrument),
+	 * or off with `null`. Reports arrive through `onStrum`.
+	 */
+	setStrum(instrument: Instrument | null): Promise<void>;
 	stop(): Promise<void>;
 }
 
 export interface TunerEngineEvents {
 	onReading(reading: TrackReading): void;
+	onStrum?(report: StrumReport): void;
 	onError?(message: string): void;
 }
 
@@ -73,9 +91,50 @@ export async function startTuner(events: TunerEngineEvents): Promise<TunerEngine
 		await context.resume();
 
 		const tracks = stream.getTracks();
+		const control = (message: ProcessorControl, transfer: Transferable[] = []) =>
+			node.port.postMessage(message, transfer);
+
+		// The strum check runs in a worker; the worklet forwards audio to it
+		// directly over a MessageChannel, so the main thread isn't involved.
+		let worker: Worker | null = null;
+		const stopStrum = () => {
+			control({ type: 'strum-port', port: null });
+			worker?.terminate();
+			worker = null;
+		};
+		const setStrum = async (instrument: Instrument | null) => {
+			if (instrument === null) return stopStrum();
+			if (worker) {
+				worker.postMessage({ type: 'instrument', instrument } satisfies StrumWorkerControl);
+				return;
+			}
+			const created = new Worker(new URL('./strum-worker.ts', import.meta.url), {
+				type: 'module'
+			});
+			worker = created;
+			created.onmessage = ({ data }: MessageEvent<StrumWorkerMessage>) => {
+				if (data.type === 'strum') events.onStrum?.(data.report);
+				else if (data.type === 'error') events.onError?.(data.message);
+			};
+			const wasmBytes = await loadTunerBytes();
+			if (worker !== created) return; // switched off meanwhile
+			const channel = new MessageChannel();
+			const init: StrumWorkerControl = {
+				type: 'init',
+				wasmBytes,
+				sampleRate: context.sampleRate,
+				instrument,
+				audio: channel.port2
+			};
+			created.postMessage(init, [channel.port2, wasmBytes]);
+			control({ type: 'strum-port', port: channel.port1 }, [channel.port1]);
+		};
+
 		return {
 			sampleRate: context.sampleRate,
+			setStrum,
 			async stop() {
+				stopStrum();
 				node.port.onmessage = null;
 				tracks.forEach((t) => t.stop());
 				await context.close();

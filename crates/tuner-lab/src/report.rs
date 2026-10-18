@@ -62,7 +62,7 @@ pub fn take_markdown(r: &TakeReport) -> String {
     for (k, strum) in r.strums.iter().enumerate() {
         let _ = writeln!(
             s,
-            "\n**Strum {}** at {:.2} s ({:.2} s window)\n\n| string | truth | estimate | error | verdicts |\n|---|---|---|---|---|",
+            "\n**Strum {}** at {:.2} s ({:.2} s window)\n\n| string | truth | estimate | error | heard | verdicts |\n|---|---|---|---|---|---|",
             k + 1,
             strum.onset,
             strum.window_seconds
@@ -73,9 +73,14 @@ pub fn take_markdown(r: &TakeReport) -> String {
                 Some(false) => "**differ**",
                 None => "–",
             };
+            let heard = match st.present {
+                Some(true) => "yes",
+                Some(false) => "**no**",
+                None => "?",
+            };
             let _ = writeln!(
                 s,
-                "| {} | {} c | {} c | {} c | {} |",
+                "| {} | {} c | {} c | {} c | {heard} | {} |",
                 st.string,
                 opt(st.truth_cents, 1),
                 opt(st.estimate_cents, 1),

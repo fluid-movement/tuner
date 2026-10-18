@@ -21,6 +21,16 @@ export interface TunerExports {
 	tuner_level_db(handle: number): number;
 	tuner_floor_db(handle: number): number;
 	tuner_locked(handle: number): number;
+	strum_new(sampleRate: number, instrument: number): number;
+	strum_free(handle: number): void;
+	strum_input(handle: number): number;
+	strum_chunk_size(): number;
+	strum_push(handle: number, len: number): number;
+	strum_set_instrument(handle: number, instrument: number): void;
+	strum_onset(handle: number): number;
+	strum_frequency(handle: number, index: number): number;
+	strum_cents(handle: number, index: number): number;
+	strum_present(handle: number, index: number): number;
 }
 
 /** Path of the module under static/, built by `pnpm build:wasm`. */
@@ -156,6 +166,78 @@ export class Tunings {
 	note(frequency: number): { midi: number; name: string; cents: number } {
 		const midi = this.#exports.tuner_note_midi(frequency);
 		return { midi, name: noteName(midi), cents: this.#exports.tuner_note_cents(frequency) };
+	}
+}
+
+/** One string's result in a strum report. */
+export interface StrumStringReading {
+	/** Estimated frequency in Hz, or null. */
+	frequency: number | null;
+	/** Offset from the string's target in cents, or null. */
+	cents: number | null;
+	/** Played? `false` = not heard; `null` = can't tell (guitar B3/E4). */
+	present: boolean | null;
+}
+
+export interface StrumReport {
+	/** Onset of the strum, seconds since listening started. */
+	onsetSeconds: number;
+	/** In string order of the instrument. */
+	strings: StrumStringReading[];
+}
+
+/** tuner-core's StrumListener (run it in a Web Worker, not the worklet). */
+export class WasmStrumListener {
+	readonly #exports: TunerExports;
+	readonly #chunk: number;
+	#handle: number;
+	#strings: number;
+
+	constructor(exports: TunerExports, sampleRate: number, instrument: Instrument) {
+		this.#exports = exports;
+		this.#handle = exports.strum_new(sampleRate, INSTRUMENT_IDS[instrument]);
+		this.#chunk = exports.strum_chunk_size();
+		this.#strings = exports.tuner_string_count(INSTRUMENT_IDS[instrument]);
+	}
+
+	setInstrument(instrument: Instrument): void {
+		this.#exports.strum_set_instrument(this.#handle, INSTRUMENT_IDS[instrument]);
+		this.#strings = this.#exports.tuner_string_count(INSTRUMENT_IDS[instrument]);
+	}
+
+	/** Feeds audio; returns a report when a strum's analysis has completed. */
+	push(samples: Float32Array): StrumReport | null {
+		const e = this.#exports;
+		let report: StrumReport | null = null;
+		for (let offset = 0; offset < samples.length; offset += this.#chunk) {
+			const part = samples.subarray(offset, offset + this.#chunk);
+			new Float32Array(e.memory.buffer, e.strum_input(this.#handle), part.length).set(part);
+			if (e.strum_push(this.#handle, part.length)) report = this.#read();
+		}
+		return report;
+	}
+
+	#read(): StrumReport {
+		const e = this.#exports;
+		const h = this.#handle;
+		return {
+			onsetSeconds: e.strum_onset(h),
+			strings: Array.from({ length: this.#strings }, (_, i) => {
+				const frequency = e.strum_frequency(h, i);
+				const cents = e.strum_cents(h, i);
+				const present = e.strum_present(h, i);
+				return {
+					frequency: frequency > 0 ? frequency : null,
+					cents: Number.isNaN(cents) ? null : cents,
+					present: present < 0 ? null : present === 1
+				};
+			})
+		};
+	}
+
+	free(): void {
+		this.#exports.strum_free(this.#handle);
+		this.#handle = 0;
 	}
 }
 

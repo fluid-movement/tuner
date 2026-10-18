@@ -61,6 +61,13 @@ fn check(take: &SyntheticTake, report: &TakeReport, instrument: Instrument, stru
                 strum.onset,
                 st.string
             );
+            assert_ne!(
+                st.present,
+                Some(false),
+                "strum at {:.2}s: {} reported not heard",
+                strum.onset,
+                st.string
+            );
             let err = st.error_cents.expect("estimate and truth");
             assert!(
                 err.abs() <= 3.0,

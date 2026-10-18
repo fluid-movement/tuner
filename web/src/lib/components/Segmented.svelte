@@ -1,19 +1,19 @@
-<script lang="ts">
-	import { INSTRUMENTS, type Instrument } from '#lib/wasm/tuner.ts';
-
+<script lang="ts" generics="T extends string">
 	interface Props {
-		value: Instrument;
+		/** Accessible name of the group, e.g. "Instrument". */
+		label: string;
+		options: readonly { value: T; label: string }[];
+		value: T;
 	}
-	let { value = $bindable() }: Props = $props();
-
-	const LABELS: Record<Instrument, string> = { guitar: 'Guitar', ukulele: 'Ukulele' };
+	let { label, options, value = $bindable() }: Props = $props();
+	let name = $derived(`segmented-${label.toLowerCase().replace(/\s+/g, '-')}`);
 </script>
 
-<div class="toggle" role="radiogroup" aria-label="Instrument">
-	{#each INSTRUMENTS as instrument (instrument)}
-		<label class:selected={value === instrument}>
-			<input type="radio" name="instrument" value={instrument} bind:group={value} />
-			{LABELS[instrument]}
+<div class="toggle" role="radiogroup" aria-label={label}>
+	{#each options as option (option.value)}
+		<label class:selected={value === option.value}>
+			<input type="radio" {name} value={option.value} bind:group={value} />
+			{option.label}
 		</label>
 	{/each}
 </div>

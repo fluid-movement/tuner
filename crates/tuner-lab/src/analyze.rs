@@ -6,7 +6,7 @@ use crate::segment::{Event, Kind, segment};
 use serde::Serialize;
 use std::path::Path;
 use tuner_core::MonoTuner;
-use tuner_core::poly::{PolyConfig, estimate_resolved};
+use tuner_core::poly::{PolyConfig, estimate_strum};
 use tuner_core::tuning::{Instrument, cents_between};
 
 /// Hop between tracker frames, as in the app.
@@ -68,6 +68,9 @@ pub struct StrumString {
     pub estimate_cents: Option<f32>,
     /// Estimate − truth, in cents.
     pub error_cents: Option<f32>,
+    /// Whether the string was judged played (`None`: can't tell, guitar
+    /// B3/E4), as the app's strum check shows it.
+    pub present: Option<bool>,
     /// Whether the in-tune/flat/sharp verdicts agree; `None` when there is
     /// no truth or estimate, or the truth is too close to the boundary.
     pub agree: Option<bool>,
@@ -286,7 +289,7 @@ fn analyze_strum(
         .into_iter()
         .find(|&n| n <= available)?;
     let config = PolyConfig::new(rate, instrument);
-    let estimates = estimate_resolved(&audio.samples[start..start + len], instrument, &config);
+    let estimates = estimate_strum(&audio.samples[start..start + len], instrument, &config);
 
     let strings = instrument
         .strings()
@@ -311,6 +314,7 @@ fn analyze_strum(
                 truth_cents,
                 estimate_cents,
                 error_cents,
+                present: est.and_then(|e| e.present),
                 agree,
             }
         })
