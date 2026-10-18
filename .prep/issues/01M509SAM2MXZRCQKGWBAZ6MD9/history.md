@@ -1,1 +1,3 @@
 - 2026-10-18T09:18:17Z edited by claude-code/opus-5.5: requirement
+
+- 2026-10-18T09:24:00Z codex/implementer: Implemented, ready for check: added scoped draft build/tooling and testing entries from current source, linked both and the existing stack decision from the overview, and corrected stale dependency/PWA wording; prep check passes (0 errors, 0 warnings) and E2E_PORT=4202 just check passes (Rust, 9 Vitest, 11 Playwright tests). Knowledge writes used the installed /Users/azaharias/go/bin/prep because the default binary lacks knowledge new/update; validation uses the current default prep. No code changes; issue left for reviewer.
