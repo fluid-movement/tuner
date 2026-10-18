@@ -1,7 +1,7 @@
-- [ ] Strum analysis runs in a Web Worker fed by the worklet over a MessageChannel; the worklet does no strum analysis
-- [ ] The UI switches between String and Strum mode (remembered); strum mode shows per-string verdict, cents and not-heard, held until the next strum
-- [ ] Playwright: fake-mic strums with known detunes show the expected per-string verdicts, including a not-heard muted string; existing tests still pass
+- [x] Strum analysis runs in a Web Worker fed by the worklet over a MessageChannel; the worklet does no strum analysis
+- [x] The UI switches between String and Strum mode (remembered); strum mode shows per-string verdict, cents and not-heard, held until the next strum
+- [x] Playwright: fake-mic strums with known detunes show the expected per-string verdicts, including a not-heard muted string; existing tests still pass
 - [ ] Re-checked against the user's real recordings with tuner-lab (or explicitly waived by the user)
-- [ ] just check passes
+- [x] just check passes
 - [ ] On synthetic strums every played string's verdict matches the truth in the near-tune scenario; muted strings with clean partials (all ukulele strings, guitar E2–G3) are reported as not heard in at least 95% of cases with under 1% of played strings reported missing; guitar B3/E4 presence is reported as unknown (documented limitation)
-- [ ] tuner-core no longer depends on rustfft; FFT matches a naive DFT and poly_eval accuracy is unchanged; tuner.wasm (with the strum code) stays under 160 KB raw / 60 KB gzipped, down from 337 KB with rustfft
+- [x] tuner-core no longer depends on rustfft; FFT matches a naive DFT and poly_eval accuracy is unchanged; tuner.wasm (with the strum code) stays under 160 KB raw / 60 KB gzipped, down from 337 KB with rustfft

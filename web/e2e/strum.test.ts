@@ -30,6 +30,12 @@ for (const [name, strum] of Object.entries(STRUMS)) {
 				expect(Math.abs(shown - c), `${string} cents`).toBeLessThanOrEqual(3);
 			}
 		}
+		const rows = page.locator('[data-testid^="strum-"][data-verdict]');
+		const held = await rows.allTextContents();
+		await expect(page.getByTestId('strum-status')).toContainText('Last strum 2 s ago');
+		expect(await rows.allTextContents()).toEqual(held);
+		// The looping microphone strums again every three seconds.
+		await expect(page.getByTestId('strum-status')).toContainText('Last strum just now');
 	});
 }
 
