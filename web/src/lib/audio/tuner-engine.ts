@@ -97,12 +97,14 @@ export async function startTuner(events: TunerEngineEvents): Promise<TunerEngine
 		// The strum check runs in a worker; the worklet forwards audio to it
 		// directly over a MessageChannel, so the main thread isn't involved.
 		let worker: Worker | null = null;
+		let strumInstrument: Instrument | null = null;
 		const stopStrum = () => {
 			control({ type: 'strum-port', port: null });
 			worker?.terminate();
 			worker = null;
 		};
 		const setStrum = async (instrument: Instrument | null) => {
+			strumInstrument = instrument;
 			if (instrument === null) return stopStrum();
 			if (worker) {
 				worker.postMessage({ type: 'instrument', instrument } satisfies StrumWorkerControl);
@@ -113,8 +115,17 @@ export async function startTuner(events: TunerEngineEvents): Promise<TunerEngine
 			});
 			worker = created;
 			created.onmessage = ({ data }: MessageEvent<StrumWorkerMessage>) => {
-				if (data.type === 'strum') events.onStrum?.(data.report);
-				else if (data.type === 'error') events.onError?.(data.message);
+				if (worker !== created) return;
+				if (data.type === 'ready' && strumInstrument !== null) {
+					// Instrument messages during WASM startup can arrive before
+					// the listener exists. Apply the latest selection once ready.
+					created.postMessage({
+						type: 'instrument',
+						instrument: strumInstrument
+					} satisfies StrumWorkerControl);
+				} else if (data.type === 'strum' && data.instrument === strumInstrument) {
+					events.onStrum?.(data.report);
+				} else if (data.type === 'error') events.onError?.(data.message);
 			};
 			const wasmBytes = await loadTunerBytes();
 			if (worker !== created) return; // switched off meanwhile

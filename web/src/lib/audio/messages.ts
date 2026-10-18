@@ -38,4 +38,6 @@ export type StrumWorkerControl =
 
 /** Messages from the strum worker. */
 export type StrumWorkerMessage =
-	{ type: 'ready' } | { type: 'strum'; report: StrumReport } | { type: 'error'; message: string };
+	| { type: 'ready' }
+	| { type: 'strum'; instrument: Instrument; report: StrumReport }
+	| { type: 'error'; message: string };

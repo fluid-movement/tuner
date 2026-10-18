@@ -3,5 +3,5 @@
 - [x] Playwright: fake-mic strums with known detunes show the expected per-string verdicts, including a not-heard muted string; existing tests still pass
 - [ ] Re-checked against the user's real recordings with tuner-lab (or explicitly waived by the user)
 - [x] just check passes
-- [x] On synthetic strums every played string's verdict matches the truth in the near-tune scenario; muted strings with clean partials (all ukulele strings, guitar E2–G3) are reported as not heard in at least 95% of cases with under 1% of played strings reported missing; guitar B3/E4 presence is reported as unknown (documented limitation)
+- [ ] On synthetic strums every played string's verdict matches the truth in the near-tune scenario; muted strings with clean partials (all ukulele strings, guitar E2–G3) are reported as not heard in at least 95% of cases with under 1% of played strings reported missing; guitar B3/E4 presence is reported as unknown (documented limitation)
 - [x] tuner-core no longer depends on rustfft; FFT matches a naive DFT and poly_eval accuracy is unchanged; tuner.wasm (with the strum code) stays under 160 KB raw / 60 KB gzipped, down from 337 KB with rustfft
