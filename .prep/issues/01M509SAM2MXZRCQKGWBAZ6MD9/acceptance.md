@@ -1,4 +1,4 @@
-- [ ] /conventions/build-and-tooling.md exists as a draft, scoped to the build files, and matches the current workspace, scripts, justfile and profiles
-- [ ] /conventions/testing.md exists as a draft, scoped to the test files, and lists every test layer with its run command
-- [ ] /overview.md links both entries and the existing stack decision record
-- [ ] prep check passes with 0 errors and 0 warnings
+- [x] /conventions/build-and-tooling.md exists as a draft, scoped to the build files, and matches the current workspace, scripts, justfile and profiles
+- [x] /conventions/testing.md exists as a draft, scoped to the test files, and lists every test layer with its run command
+- [x] /overview.md links both entries and the existing stack decision record
+- [x] prep check passes with 0 errors and 0 warnings
