@@ -9,3 +9,5 @@
 - 2026-10-18T09:05:55Z claude-code/opus-5.5: Step 3+4 done: StrumListener (streaming onsets, report one window after the strum; 5 tests) and strum_* wasm exports (C-ABI test). tuner.wasm 147 KB stripped / 55 KB gzipped. Next: worker, UI mode, e2e.
 
 - 2026-10-18T09:17:54Z claude-code/opus-5.5: Step 5+6 done on main: strum worker (MessageChannel from the worklet), String/Strum mode with StrumView, tuner-lab reports presence, Playwright strum projects (guitar detunes, ukulele with muted A4) pass; just check green. Remaining for the implementer: knowledge entries (poly-estimation, audio-pipeline, ui, single-string-tuner/new strum feature entry, note the wasm size decision), criterion checks, log ready for check. Criterion 5 (real recordings) needs the user.
+
+- 2026-10-18T09:18:31Z released by claude-code/opus-5.5 (claimed by claude-code/opus-5.5 at 2026-10-16T18:39:46Z): Handed to a Codex implementer in a worktree (orchestrated by Claude)
