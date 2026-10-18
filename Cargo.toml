@@ -12,3 +12,5 @@ opt-level = 3
 lto = true
 codegen-units = 1
 panic = "abort"
+# Drops the WASM name section (~16 KB) and native symbols.
+strip = true

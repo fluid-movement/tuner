@@ -8,7 +8,7 @@
 //! display state) and read `tuner_frequency(handle)` and the other getters.
 
 use tuner_core::tuning::cents_between;
-use tuner_core::{Instrument, MonoTuner, Note, TrackerOutput};
+use tuner_core::{Instrument, MonoTuner, Note, StrumListener, StrumReport, TrackerOutput};
 
 /// Detector state behind a handle owned by JS.
 pub struct Tuner {
@@ -212,6 +212,147 @@ pub unsafe extern "C" fn tuner_locked(tuner: *const Tuner) -> u32 {
     last(tuner).is_some_and(|o| o.locked) as u32
 }
 
+/// Strum check state behind a handle owned by JS (run it in a Web Worker,
+/// not the audio thread: an analysis takes several milliseconds).
+pub struct Strum {
+    listener: StrumListener,
+    input: Vec<f32>,
+    last: Option<StrumReport>,
+}
+
+/// Largest chunk accepted by [`strum_push`].
+const STRUM_CHUNK: usize = 8192;
+
+/// Creates a strum listener for instrument `id` (0 guitar, 1 ukulele);
+/// null for an unknown id. Release it with [`strum_free`].
+#[unsafe(no_mangle)]
+pub extern "C" fn strum_new(sample_rate: f32, id: u32) -> *mut Strum {
+    let Some(instrument) = instrument(id) else {
+        return std::ptr::null_mut();
+    };
+    Box::into_raw(Box::new(Strum {
+        listener: StrumListener::new(sample_rate, instrument),
+        input: vec![0.0; STRUM_CHUNK],
+        last: None,
+    }))
+}
+
+/// # Safety
+///
+/// `strum` must come from [`strum_new`] and not be used afterwards.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn strum_free(strum: *mut Strum) {
+    if !strum.is_null() {
+        drop(unsafe { Box::from_raw(strum) });
+    }
+}
+
+/// Address of the input buffer (room for `strum_chunk_size()` samples).
+///
+/// # Safety
+///
+/// `strum` must be a live handle from [`strum_new`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn strum_input(strum: *mut Strum) -> *mut f32 {
+    unsafe { &mut *strum }.input.as_mut_ptr()
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn strum_chunk_size() -> u32 {
+    STRUM_CHUNK as u32
+}
+
+/// Feeds the first `len` samples of the input buffer. Returns 1 when a strum
+/// report has just completed (read it with the getters below), else 0.
+///
+/// # Safety
+///
+/// `strum` must be a live handle from [`strum_new`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn strum_push(strum: *mut Strum, len: u32) -> u32 {
+    let strum = unsafe { &mut *strum };
+    let len = (len as usize).min(STRUM_CHUNK);
+    match strum.listener.push(&strum.input[..len]) {
+        Some(report) => {
+            strum.last = Some(report);
+            1
+        }
+        None => 0,
+    }
+}
+
+/// Switches instrument (0 guitar, 1 ukulele); unknown ids are ignored.
+///
+/// # Safety
+///
+/// `strum` must be a live handle from [`strum_new`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn strum_set_instrument(strum: *mut Strum, id: u32) {
+    if let Some(i) = instrument(id) {
+        unsafe { &mut *strum }.listener.set_instrument(i);
+    }
+}
+
+fn strum_string(strum: *const Strum, index: u32) -> Option<tuner_core::StrumString> {
+    unsafe { &*strum }
+        .last
+        .as_ref()?
+        .strings
+        .get(index as usize)
+        .copied()
+}
+
+/// Onset of the last report, in seconds since the listener started (-1 if none).
+///
+/// # Safety
+///
+/// `strum` must be a live handle from [`strum_new`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn strum_onset(strum: *const Strum) -> f64 {
+    unsafe { &*strum }
+        .last
+        .as_ref()
+        .map_or(-1.0, |r| r.onset_seconds)
+}
+
+/// Estimated frequency (Hz) of string `index` in the last report, or 0.
+///
+/// # Safety
+///
+/// `strum` must be a live handle from [`strum_new`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn strum_frequency(strum: *const Strum, index: u32) -> f32 {
+    strum_string(strum, index)
+        .and_then(|s| s.frequency)
+        .unwrap_or(0.0)
+}
+
+/// Offset in cents of string `index` from its target, or NaN.
+///
+/// # Safety
+///
+/// `strum` must be a live handle from [`strum_new`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn strum_cents(strum: *const Strum, index: u32) -> f32 {
+    strum_string(strum, index)
+        .and_then(|s| s.cents)
+        .unwrap_or(f32::NAN)
+}
+
+/// Whether string `index` was played: 1 yes, 0 not heard, -1 can't tell.
+///
+/// # Safety
+///
+/// `strum` must be a live handle from [`strum_new`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn strum_present(strum: *const Strum, index: u32) -> i32 {
+    match strum_string(strum, index).and_then(|s| s.present) {
+        Some(true) => 1,
+        Some(false) => 0,
+        None => -1,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -292,6 +433,47 @@ mod tests {
             tuner_reset(t);
             assert_eq!(tuner_frequency(t), 0.0);
             tuner_free(t);
+        }
+    }
+
+    #[test]
+    fn strums_through_the_c_abi() {
+        use tuner_core::synth::{PluckedString, Rng, render};
+        let rate = 48_000.0;
+        let mut rng = Rng::new(1);
+        let notes: Vec<PluckedString> = tuner_core::Instrument::Ukulele
+            .strings()
+            .iter()
+            .enumerate()
+            .map(|(i, t)| PluckedString {
+                frequency: t.frequency,
+                level: 0.05,
+                onset: 0.5 + 0.015 * i as f32,
+                inharmonicity: 2e-5,
+                decay: 1.0,
+                rolloff: 0.9,
+                pluck_position: 0.17,
+                polarization_cents: 0.0,
+            })
+            .collect();
+        let x = render(&notes, rate, 2.0, 0.002, &mut rng);
+        unsafe {
+            assert!(strum_new(rate, 7).is_null());
+            let s = strum_new(rate, 1);
+            let chunk = 1024;
+            let mut reports = 0;
+            for c in x.chunks(chunk) {
+                std::slice::from_raw_parts_mut(strum_input(s), c.len()).copy_from_slice(c);
+                reports += strum_push(s, c.len() as u32);
+            }
+            assert_eq!(reports, 1);
+            assert!((strum_onset(s) - 0.5).abs() < 0.05);
+            for i in 0..4 {
+                assert_eq!(strum_present(s, i), 1);
+                assert!(strum_cents(s, i).abs() < 3.0, "{}", strum_cents(s, i));
+            }
+            assert!(strum_cents(s, 9).is_nan());
+            strum_free(s);
         }
     }
 }
