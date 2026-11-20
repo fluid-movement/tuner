@@ -1,0 +1,3 @@
+- [x] chord_stream_eval noise bursts (60 s): no chords reported
+- [x] chord_eval accuracy unchanged (notes 100% at 16384, >= 98% at 8192 in all conditions)
+- [x] No chord found shows 'Couldn't make out a chord' in the UI (existing ChordView state)

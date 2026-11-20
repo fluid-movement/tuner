@@ -1,0 +1,4 @@
+- [x] chord_stream_eval: strums 0.5 s and 0.3 s apart settle with the right notes >= 95%
+- [x] Slow single strums unchanged (100%) with no extra chords; detuned strings >= 95%
+- [x] Unit test: 12 strums 0.35 s apart, >= 11 settle; existing strum and tuning tests pass
+- [x] wasm within budget; unit, lint and browser tests pass

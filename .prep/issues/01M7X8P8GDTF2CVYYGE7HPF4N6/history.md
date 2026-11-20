@@ -1,0 +1,1 @@
+- 2026-11-20T20:15:29Z claude-code: Check pass: noise bursts 0 chords (was 81); chord_eval 8192 96.0-96.5% tab / 98.1-98.5% notes, 16384 notes 100%; ChordView shows 'Couldn't make out a chord' when report.chord is null.
