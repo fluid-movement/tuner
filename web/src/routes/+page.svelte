@@ -201,7 +201,7 @@
 			<ChordView
 				strings={ukulele}
 				report={strum?.report ?? null}
-				history={chords.map((c) => c.name ?? '?')}
+				history={chords.map((c) => c.analysis?.symbol ?? '?')}
 				listening={running}
 			/>
 		{:else if mode === 'strum'}

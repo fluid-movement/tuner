@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { Tunings, WasmMonoTuner, chordName, instantiateTuner, noteName } from './tuner';
+import { Tunings, WasmMonoTuner, instantiateTuner, noteName } from './tuner';
 
 const bytes = readFileSync(new URL('../../../static/wasm/tuner.wasm', import.meta.url));
 
@@ -66,18 +66,5 @@ describe('Tunings', () => {
 		expect(near.cents).toBeCloseTo(1200 * Math.log2(108 / 110), 3);
 		expect(t.nearest('ukulele', 393).string.index).toBe(0);
 		expect(t.note(446).name).toBe('A4');
-	});
-});
-
-describe('chordName', () => {
-	it('maps tuner-core roots and qualities to names', () => {
-		expect([chordName(0, 0), chordName(9, 4), chordName(10, 0), chordName(7, 2)]).toEqual([
-			'C',
-			'Am7',
-			'Bb',
-			'G7'
-		]);
-		expect(chordName(-1, -1)).toBeNull();
-		expect(chordName(0, 99)).toBeNull();
 	});
 });

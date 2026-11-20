@@ -642,7 +642,6 @@ mod tests {
         assert!(reports[1].settled);
         let chord = reports[1].chord.as_ref().expect("chord");
         assert_eq!(chord.frets, frets);
-        assert_eq!(chord.name.unwrap().to_string(), "F");
         assert!(reports[1].strings.is_empty());
     }
 }

@@ -15,6 +15,13 @@
 
 	const FRETS_SHOWN = 4;
 	let chord = $derived(report?.chord ?? null);
+	let analysis = $derived(chord?.analysis ?? null);
+	/** Sounding note and role per string (null = muted / no chord). */
+	let perString = $derived.by(() => {
+		const tones = analysis?.tones ?? [];
+		let k = 0;
+		return (chord?.frets ?? strings.map(() => null)).map((f) => (f === null ? null : tones[k++]));
+	});
 	let frets = $derived(chord?.frets ?? strings.map(() => null));
 	/** First fret shown in the diagram (1 unless the shape sits higher). */
 	let base = $derived.by(() => {
@@ -36,7 +43,7 @@
 
 	// Diagram geometry (SVG user units).
 	const W = 160;
-	const H = 170;
+	const H = 190;
 	const left = 24;
 	const top = 34;
 	const fretH = 30;
@@ -59,14 +66,22 @@
 	</p>
 
 	<div class="name" data-testid="chord-name" class:pending={report && !report.settled}>
-		{#if chord?.name}
-			{chord.name}
-		{:else if chord}
-			?
+		{#if analysis}
+			{analysis.symbol}
 		{:else}
 			<span class="placeholder">–</span>
 		{/if}
 	</div>
+	{#if analysis}
+		<p class="about">
+			<span data-testid="chord-description">{analysis.description}</span>
+			{#if analysis.alternatives.length}
+				<span class="also" data-testid="chord-alternatives"
+					>also {analysis.alternatives.join(' · ')}</span
+				>
+			{/if}
+		</p>
+	{/if}
 
 	<div class="shapes">
 		<svg
@@ -95,12 +110,28 @@
 				{:else if chord && f !== null}
 					<circle cx={x} cy={top + (f - base + 0.5) * fretH} r="9" class="dot" />
 				{/if}
-				<text {x} y={H - 4} class="label">{noteNames[i]}</text>
+				{#if perString[i]}
+					<text {x} y={H - 18} class="note">{perString[i]!.name}</text>
+					<text {x} y={H - 2} class="role">{perString[i]!.role}</text>
+				{:else}
+					<text {x} y={H - 18} class="label">{noteNames[i]}</text>
+				{/if}
 			{/each}
 		</svg>
 
 		<pre class="tab" data-testid="chord-tab">{tab.join('\n')}</pre>
 	</div>
+
+	{#if analysis?.keys.length}
+		<p class="keys" data-testid="chord-keys">
+			In {analysis.keys
+				.slice(0, 3)
+				.map((k) => `${k.key} (${k.numeral})`)
+				.join(' · ')}
+		</p>
+	{:else if analysis}
+		<p class="keys" data-testid="chord-keys">Outside any single major key</p>
+	{/if}
 
 	{#if history.length}
 		<ol class="history" aria-label="Recent chords" data-testid="chord-history">
@@ -164,6 +195,31 @@
 		fill: none;
 		stroke: var(--text);
 		stroke-width: 1.5;
+	}
+	.note {
+		fill: var(--text);
+		font-size: 14px;
+		font-weight: 600;
+		text-anchor: middle;
+	}
+	.role {
+		fill: var(--accent);
+		font-size: 12px;
+		text-anchor: middle;
+	}
+	.about {
+		margin: -4px 0 0;
+		color: var(--muted);
+		display: grid;
+		gap: 2px;
+	}
+	.also {
+		font-size: 0.9rem;
+	}
+	.keys {
+		margin: 0;
+		color: var(--muted);
+		font-size: 0.9rem;
 	}
 	.mark,
 	.label,

@@ -68,3 +68,15 @@ for (const [name, chord] of Object.entries(CHORDS)) {
 		await expect(page.getByTestId('chord-history')).toContainText(chord.name);
 	});
 }
+
+test('chord mode explains what a chord is @chord-uke-fadd9', async ({ page }) => {
+	await open(page, 'Chord');
+	await expect(page.getByTestId('chord-name')).toHaveText('Fadd9', { timeout: 15_000 });
+	await expect(page.getByTestId('chord-description')).toHaveText('major triad, added 9th');
+	await expect(page.getByTestId('chord-alternatives')).toContainText('also');
+	await expect(page.getByTestId('chord-keys')).toHaveText(
+		'In F major (Iadd9) · Bb major (Vadd9) · C major (IVadd9)'
+	);
+	// Each string's note and role under the diagram.
+	await expect(page.getByTestId('chord-diagram')).toContainText('G9C5FRA3');
+});

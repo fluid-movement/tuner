@@ -10,7 +10,7 @@ pub mod synth;
 pub mod tracker;
 pub mod tuning;
 
-pub use chord::{ChordName, ChordReading, Quality};
+pub use chord::ChordReading;
 pub use pitch::{PitchConfig, PitchDetector, PitchEstimate};
 pub use strum::{StrumListener, StrumReport, StrumString};
 pub use tracker::{MonoTuner, NoteTracker, TrackState, TrackerConfig, TrackerOutput};

@@ -3,18 +3,20 @@
 //! cargo run --release -p tuner-core --example chord_eval [count-per-chord] [window...]
 //!
 //! For each window length (samples at 48 kHz, default 4096 8192 16384) prints
-//! how often the tab and the name are right. Set CHORD_DEBUG=1 to print
-//! every miss.
+//! how often the tab and the set of sounding notes are right (naming the
+//! notes is the web app's music theory, tested there). Set CHORD_DEBUG=1 to
+//! print every miss.
 
 use std::time::Instant;
-use tuner_core::chord::{detect_chord, name_chord};
+use tuner_core::chord::detect_chord;
 use tuner_core::synth::{Rng, chord_strum, highpass, render};
 use tuner_core::tuning::Instrument;
 
 const RATE: f32 = 48_000.0;
 
-/// Common ukulele chords, frets in string order G C E A.
-const CHORDS: [(&str, [u8; 4]); 30] = [
+/// Ukulele chords (labels only), frets in string order G C E A: the common
+/// open chords plus extended and altered ones.
+const CHORDS: [(&str, [u8; 4]); 48] = [
     ("C", [0, 0, 0, 3]),
     ("Am", [2, 0, 0, 0]),
     ("F", [2, 0, 1, 0]),
@@ -45,6 +47,24 @@ const CHORDS: [(&str, [u8; 4]); 30] = [
     ("Cm", [0, 3, 3, 3]),
     ("Bdim", [4, 2, 1, 2]),
     ("Caug", [1, 0, 0, 3]),
+    ("Fadd9", [0, 0, 1, 0]),
+    ("Cadd9", [0, 2, 0, 3]),
+    ("A7sus4", [0, 2, 0, 0]),
+    ("C7sus4", [0, 0, 1, 1]),
+    ("Amadd9", [2, 0, 0, 2]),
+    ("Aadd9", [2, 1, 0, 2]),
+    ("Ddim7", [1, 2, 1, 2]),
+    ("Adim7", [2, 3, 2, 3]),
+    ("Bm7b5", [2, 2, 1, 2]),
+    ("Gm7", [0, 2, 1, 1]),
+    ("Gm6", [0, 2, 0, 1]),
+    ("C7#5", [1, 0, 0, 1]),
+    ("Cm7", [3, 3, 3, 3]),
+    ("A13", [0, 1, 2, 0]),
+    ("Gsus4", [0, 2, 3, 3]),
+    ("Em7", [0, 2, 0, 2]),
+    ("D6", [2, 2, 2, 2]),
+    ("Amaj7", [1, 1, 0, 0]),
 ];
 
 fn main() {
@@ -62,22 +82,9 @@ fn main() {
             ("phone mic", 0.004, true),
         ] {
             let mut rng = Rng::new(window as u64 + noise.to_bits() as u64);
-            let (mut tabs, mut sets, mut names, mut total) = (0, 0, 0, 0);
+            let (mut tabs, mut sets, mut total) = (0, 0, 0);
             let mut elapsed = 0.0;
             for (name, frets) in CHORDS {
-                assert_eq!(
-                    name_chord(
-                        &frets
-                            .iter()
-                            .zip(Instrument::Ukulele.strings())
-                            .map(|(&f, s)| s.midi + i32::from(f))
-                            .collect::<Vec<_>>()
-                    )
-                    .map(|n| n.to_string())
-                    .as_deref(),
-                    Some(name),
-                    "reference name"
-                );
                 let frets: Vec<Option<u8>> = frets.iter().map(|&f| Some(f)).collect();
                 for _ in 0..count {
                     let strum = chord_strum(Instrument::Ukulele, &frets, 8.0, &mut rng);
@@ -97,7 +104,6 @@ fn main() {
                     );
                     elapsed += t.elapsed().as_secs_f64();
                     total += 1;
-                    let got_name = r.as_ref().and_then(|r| r.name).map(|n| n.to_string());
                     let tab_ok = r.as_ref().is_some_and(|r| r.frets == frets);
                     tabs += tab_ok as usize;
                     let notes = |m: &[Option<i32>]| {
@@ -112,22 +118,19 @@ fn main() {
                         .map(|(f, s)| f.map(|f| s.midi + i32::from(f)))
                         .collect();
                     sets += r.as_ref().is_some_and(|r| notes(&r.midi) == notes(&truth)) as usize;
-                    names += (got_name.as_deref() == Some(name)) as usize;
                     if debug && !tab_ok {
                         eprintln!(
-                            "  {window} {label}: {name} {:?} -> {:?} {:?}",
+                            "  {window} {label}: {name} {:?} -> {:?}",
                             frets,
-                            r.as_ref().map(|r| &r.frets),
-                            got_name
+                            r.as_ref().map(|r| &r.frets)
                         );
                     }
                 }
             }
             println!(
-                "window {window:>5} {label:<9}: tab {:5.1}%  notes {:5.1}%  name {:5.1}%  ({:.2} ms/analysis, n={total})",
+                "window {window:>5} {label:<9}: tab {:5.1}%  notes {:5.1}%  ({:.2} ms/analysis, n={total})",
                 100.0 * tabs as f64 / total as f64,
                 100.0 * sets as f64 / total as f64,
-                100.0 * names as f64 / total as f64,
                 elapsed * 1e3 / total as f64
             );
         }

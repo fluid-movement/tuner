@@ -42,7 +42,8 @@ const UKULELE = [391.99544, 261.62557, 329.62756, 440];
 /** Ukulele chords strummed every 3 s (frets in string order G C E A). */
 export const CHORDS = {
 	'chord-uke-c': { name: 'C', frets: [0, 0, 0, 3] },
-	'chord-uke-g7': { name: 'G7', frets: [0, 2, 1, 2] }
+	'chord-uke-g7': { name: 'G7', frets: [0, 2, 1, 2] },
+	'chord-uke-fadd9': { name: 'Fadd9', frets: [0, 0, 1, 0] }
 } as const;
 
 function fakeMic(name: string, write: (path: string) => void) {

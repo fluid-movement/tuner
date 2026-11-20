@@ -408,31 +408,6 @@ pub unsafe extern "C" fn strum_chord_fret(strum: *const Strum, index: u32) -> i3
     }
 }
 
-/// Root pitch class (0 = C) of the last chord, -1 if it has no name.
-///
-/// # Safety
-///
-/// `strum` must be a live handle from [`strum_new`].
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn strum_chord_root(strum: *const Strum) -> i32 {
-    strum_chord(unsafe { &*strum })
-        .and_then(|c| c.name)
-        .map_or(-1, |n| i32::from(n.root))
-}
-
-/// Quality of the last chord (`tuner_core::Quality` discriminant), -1 if it
-/// has no name.
-///
-/// # Safety
-///
-/// `strum` must be a live handle from [`strum_new`].
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn strum_chord_quality(strum: *const Strum) -> i32 {
-    strum_chord(unsafe { &*strum })
-        .and_then(|c| c.name)
-        .map_or(-1, |n| n.quality as i32)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -570,11 +545,6 @@ mod tests {
                 assert_eq!(strum_chord_fret(s, i), 0);
             }
             assert_eq!(strum_chord_fret(s, 4), -2);
-            assert_eq!(strum_chord_root(s), 9);
-            assert_eq!(
-                strum_chord_quality(s),
-                tuner_core::Quality::MinorSeventh as i32
-            );
             strum_free(s);
         }
     }

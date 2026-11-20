@@ -1,5 +1,6 @@
 //! Chord recognition for a strum: which fret each string was played at
-//! (a tab) and the chord's name.
+//! (a tab). Naming the chord is music theory, done by the web app
+//! (`web/src/lib/theory`).
 //!
 //! The strum's spectrum is reduced to its peaks. Every string gets
 //! candidates at frets `0..=MAX_FRET`, each kept only if a peak sits at its
@@ -45,7 +46,7 @@ const COMMON_SHAPE_BONUS: f32 = 0.01;
 /// Common ukulele chord shapes (frets in string order G C E A). The same
 /// notes can often be fingered several ways; when the sound can't tell them
 /// apart, one of these wins.
-pub const COMMON_UKULELE_SHAPES: [[u8; 4]; 47] = [
+pub const COMMON_UKULELE_SHAPES: &[[u8; 4]] = &[
     [0, 0, 0, 3], // C
     [0, 0, 0, 1], // C7
     [0, 0, 0, 2], // Cmaj7
@@ -93,119 +94,21 @@ pub const COMMON_UKULELE_SHAPES: [[u8; 4]; 47] = [
     [2, 1, 2, 0], // F#m
     [3, 1, 2, 1], // F#
     [1, 3, 4, 3], // Ab
+    [0, 0, 1, 0], // Fadd9
+    [0, 2, 0, 3], // Cadd9
+    [0, 0, 0, 5], // Cadd9 (high D)
+    [0, 2, 0, 0], // A7sus4
+    [0, 0, 1, 1], // C7sus4
+    [2, 0, 0, 2], // Amadd9
+    [2, 1, 0, 2], // Aadd9
+    [1, 2, 1, 2], // dim7 shape (Ddim7 = Fdim7 = G#dim7 = Bdim7)
+    [2, 3, 2, 3], // dim7 shape
+    [3, 4, 3, 3], // C7 (closed)
+    [2, 2, 1, 2], // Bm7b5 / Dm6
+    [0, 2, 1, 1], // Gm7
+    [0, 2, 0, 1], // Gm6
+    [1, 0, 0, 1], // C7#5
 ];
-
-/// Chord qualities recognised by [`name_chord`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(u8)]
-pub enum Quality {
-    Major = 0,
-    Minor = 1,
-    Seventh = 2,
-    MajorSeventh = 3,
-    MinorSeventh = 4,
-    Sus2 = 5,
-    Sus4 = 6,
-    Diminished = 7,
-    Augmented = 8,
-}
-
-impl Quality {
-    /// In order of preference when a set of notes has several names.
-    pub const ALL: [Quality; 9] = [
-        Quality::Major,
-        Quality::Minor,
-        Quality::Seventh,
-        Quality::MinorSeventh,
-        Quality::MajorSeventh,
-        Quality::Sus4,
-        Quality::Sus2,
-        Quality::Diminished,
-        Quality::Augmented,
-    ];
-
-    /// Suffix after the root, such as `"m7"`.
-    pub fn suffix(self) -> &'static str {
-        match self {
-            Quality::Major => "",
-            Quality::Minor => "m",
-            Quality::Seventh => "7",
-            Quality::MajorSeventh => "maj7",
-            Quality::MinorSeventh => "m7",
-            Quality::Sus2 => "sus2",
-            Quality::Sus4 => "sus4",
-            Quality::Diminished => "dim",
-            Quality::Augmented => "aug",
-        }
-    }
-
-    /// Semitones above the root, and whether the fifth (7) may be left out.
-    fn intervals(self) -> (&'static [u8], bool) {
-        match self {
-            Quality::Major => (&[0, 4, 7], false),
-            Quality::Minor => (&[0, 3, 7], false),
-            Quality::Seventh => (&[0, 4, 7, 10], true),
-            Quality::MajorSeventh => (&[0, 4, 7, 11], true),
-            Quality::MinorSeventh => (&[0, 3, 7, 10], true),
-            Quality::Sus2 => (&[0, 2, 7], false),
-            Quality::Sus4 => (&[0, 5, 7], false),
-            Quality::Diminished => (&[0, 3, 6], false),
-            Quality::Augmented => (&[0, 4, 8], false),
-        }
-    }
-}
-
-/// Root (pitch class, 0 = C) and quality.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ChordName {
-    pub root: u8,
-    pub quality: Quality,
-}
-
-const ROOT_NAMES: [&str; 12] = [
-    "C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B",
-];
-
-impl std::fmt::Display for ChordName {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}{}",
-            ROOT_NAMES[self.root as usize % 12],
-            self.quality.suffix()
-        )
-    }
-}
-
-/// Names the chord formed by `midi` notes (any order, doublings allowed).
-/// Among several fitting names, one rooted on the lowest note wins, then
-/// the order of [`Quality::ALL`]. `None` if no quality fits.
-pub fn name_chord(midi: &[i32]) -> Option<ChordName> {
-    let bass = midi.iter().copied().min()?.rem_euclid(12) as u8;
-    let set: u16 = midi
-        .iter()
-        .fold(0, |s, &m| s | 1 << m.rem_euclid(12) as u16);
-    let mut best: Option<(bool, usize, ChordName)> = None;
-    for root in 0..12u8 {
-        if set & (1 << root) == 0 {
-            continue;
-        }
-        let rotated = ((set >> root) | (set << (12 - root))) & 0xfff;
-        for (rank, &quality) in Quality::ALL.iter().enumerate() {
-            let (intervals, fifth_optional) = quality.intervals();
-            let full: u16 = intervals.iter().fold(0, |s, &i| s | 1 << i);
-            let fits = rotated == full || (fifth_optional && rotated == full & !(1 << 7));
-            if !fits {
-                continue;
-            }
-            let key = (root != bass, rank);
-            if best.is_none_or(|(b, r, _)| key < (b, r)) {
-                best = Some((key.0, key.1, ChordName { root, quality }));
-            }
-        }
-    }
-    best.map(|(_, _, name)| name)
-}
 
 /// A recognised strum.
 #[derive(Debug, Clone, PartialEq)]
@@ -214,8 +117,6 @@ pub struct ChordReading {
     pub frets: Vec<Option<u8>>,
     /// Sounding MIDI note per string (`None` = muted).
     pub midi: Vec<Option<i32>>,
-    /// The chord's name, if the notes form a known chord.
-    pub name: Option<ChordName>,
     /// Share of the spectrum's peak weight the tab explains (0..1).
     pub explained: f32,
 }
@@ -247,19 +148,25 @@ fn find_peaks(spectrum: &Spectrum) -> Vec<Peak> {
         })
         .filter(|&i| {
             // Background: outside the window's main lobe, out to a semitone
-            // or two lobes, whichever is wider.
+            // or two lobes, whichever is wider, on either side.
             let hz = i as f32 * spectrum.bin_hz;
             let reach = ((hz * (2f32.powf(1.0 / 12.0) - 1.0)) / spectrum.bin_hz)
                 .ceil()
                 .max(2.0 * lobe_bins as f32) as usize;
-            let mut around: Vec<f32> = (i.saturating_sub(reach)..(i + reach + 1).min(db.len()))
-                .filter(|&j| j.abs_diff(i) > lobe_bins)
-                .map(|j| db[j])
-                .collect();
-            around.sort_by(f32::total_cmp);
-            around
-                .get(around.len() / 2)
-                .is_none_or(|&median| db[i] - median >= PEAK_PROMINENCE_DB)
+            // Each side separately, the quieter one counts: a neighbour a
+            // semitone away (E4 under F4) fills one side with its main lobe.
+            let median = |range: std::ops::Range<usize>| {
+                let mut side: Vec<f32> = range.filter(|&j| j < db.len()).map(|j| db[j]).collect();
+                side.sort_by(f32::total_cmp);
+                side.get(side.len() / 2).copied()
+            };
+            let left = median(i.saturating_sub(reach)..i.saturating_sub(lobe_bins));
+            let right = median(i + lobe_bins + 1..i + reach + 1);
+            let background = match (left, right) {
+                (Some(l), Some(r)) => l.min(r),
+                (l, r) => l.or(r).unwrap_or(f32::MIN),
+            };
+            db[i] - background >= PEAK_PROMINENCE_DB
         })
         .map(|i| {
             let (l, m, r) = (db[i - 1], db[i], db[i + 1]);
@@ -411,9 +318,7 @@ fn reading(instrument: Instrument, frets: Vec<Option<u8>>, explained: f32) -> Ch
         .zip(instrument.strings())
         .map(|(f, s)| f.map(|f| s.midi + i32::from(f)))
         .collect();
-    let notes: Vec<i32> = midi.iter().flatten().copied().collect();
     ChordReading {
-        name: name_chord(&notes),
         frets,
         midi,
         explained,
@@ -424,30 +329,6 @@ fn reading(instrument: Instrument, frets: Vec<Option<u8>>, explained: f32) -> Ch
 mod tests {
     use super::*;
     use crate::synth::{Rng, chord_strum, render};
-
-    fn name(midi: &[i32]) -> String {
-        name_chord(midi).map_or("?".into(), |n| n.to_string())
-    }
-
-    #[test]
-    fn names_common_chords() {
-        // Ukulele G C E A strings: 67 60 64 69.
-        assert_eq!(name(&[67, 60, 64, 72]), "C"); // 0003
-        assert_eq!(name(&[69, 60, 64, 69]), "Am"); // 2000
-        assert_eq!(name(&[69, 60, 65, 69]), "F"); // 2010
-        assert_eq!(name(&[67, 62, 67, 71]), "G"); // 0232
-        assert_eq!(name(&[67, 62, 65, 71]), "G7"); // 0212
-        assert_eq!(name(&[67, 60, 64, 69]), "Am7"); // 0000
-        assert_eq!(name(&[67, 60, 64, 70]), "C7"); // 0001
-        assert_eq!(name(&[68, 62, 64, 71]), "E7"); // 1202
-        assert_eq!(name(&[70, 62, 65, 70]), "Bb"); // 3211
-        assert_eq!(name(&[67, 60, 64, 71]), "Cmaj7"); // 0002
-        assert_eq!(name(&[69, 62, 65, 69]), "Dm"); // 2210
-        assert_eq!(name(&[67, 62, 69, 74]).as_str(), "Dsus4"); // 0255: G D A D
-        assert_eq!(name(&[60, 64, 70]), "C7"); // no fifth
-        assert_eq!(name(&[60, 61, 62]), "?");
-        assert_eq!(name(&[]), "?");
-    }
 
     #[test]
     fn recognises_a_synthetic_c_major_strum() {
@@ -465,7 +346,7 @@ mod tests {
         )
         .expect("chord");
         assert_eq!(r.frets, frets);
-        assert_eq!(r.name.unwrap().to_string(), "C");
+        assert_eq!(r.midi, [Some(67), Some(60), Some(64), Some(72)]);
     }
 
     #[test]
