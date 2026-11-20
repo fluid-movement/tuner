@@ -1,0 +1,3 @@
+- [x] Chord, strum and string modes fit 360x640 and 390x844 without vertical or horizontal scrolling (checked in Chrome with the fake microphone)
+- [x] Switches are at least 44 px tall; safe-area insets applied; no double-tap zoom or tap highlight
+- [x] Unit, lint and browser tests pass

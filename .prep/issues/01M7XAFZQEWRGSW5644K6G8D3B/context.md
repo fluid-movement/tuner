@@ -1,0 +1,1 @@
+Code: `web/src/routes/+page.svelte` (layout, safe areas), `web/src/app.css` (touch ergonomics), `web/src/app.html` (viewport-fit), `web/src/lib/components/Segmented.svelte` (44 px), `ChordView.svelte` (short/tall screen media queries).

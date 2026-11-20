@@ -1,0 +1,1 @@
+- 2026-11-20T20:57:55Z claude-code: Check pass: screenshots at 360x640 (chord, strum) and 390x844 (chord) report 0 vertical and horizontal overflow; Segmented min-height 44 px; svelte-check, eslint/prettier clean; Playwright 22 incl. the 375 px layout test.
