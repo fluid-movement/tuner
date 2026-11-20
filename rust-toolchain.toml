@@ -1,0 +1,6 @@
+# Same compiler and lints locally and in CI: a newer stable once broke CI
+# with a lint the local toolchain didn't have. Bump deliberately.
+[toolchain]
+channel = "1.100.0"
+components = ["clippy", "rustfmt"]
+targets = ["wasm32-unknown-unknown"]

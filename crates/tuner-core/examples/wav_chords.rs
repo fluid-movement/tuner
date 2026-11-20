@@ -18,8 +18,10 @@ fn main() {
         .expect("data chunk")
         + 8;
     let samples: Vec<f32> = bytes[data..]
-        .chunks_exact(2)
-        .map(|b| f32::from(i16::from_le_bytes([b[0], b[1]])) / 32768.0)
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|&b| f32::from(i16::from_le_bytes(b)) / 32768.0)
         .collect();
     let x: Vec<f32> = (0..loops).flat_map(|_| samples.iter().copied()).collect();
     let mut listener = StrumListener::new(rate, Instrument::Ukulele);

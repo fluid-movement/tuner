@@ -146,7 +146,9 @@ pub unsafe extern "C" fn tuner_process(tuner: *mut Tuner) -> u32 {
 
 /// Turns pitch detection on (1, the default) or off (0: frames only update
 /// the level and noise floor, for the level meter while strum or chord
-/// analysis runs elsewhere). Turning it off forgets the tracked note.
+/// analysis runs elsewhere). Any switch forgets the tracked note and the
+/// noise floor: a floor learned from level-only frames can sit at the level
+/// of a note already sounding, which then couldn't lock.
 ///
 /// # Safety
 ///
@@ -155,7 +157,7 @@ pub unsafe extern "C" fn tuner_process(tuner: *mut Tuner) -> u32 {
 pub unsafe extern "C" fn tuner_set_pitch(tuner: *mut Tuner, on: u32) {
     let tuner = unsafe { &mut *tuner };
     let on = on != 0;
-    if tuner.pitch && !on {
+    if tuner.pitch != on {
         tuner.mono.reset();
     }
     tuner.pitch = on;
