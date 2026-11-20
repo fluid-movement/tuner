@@ -1,0 +1,1 @@
+Code: `crates/tuner-core/src/chord.rs` (below-range check, `OVERTONES`, `peak_width_bins`/`MAX_PEAK_WIDTH_BINS`, `FUNDAMENTAL_PROMINENCE_DB`, test `voices_and_whistles_are_not_chords`), `crates/tuner-core/src/strum.rs` (`MIN_ONSET_DB`, `first_notes` agreement). Eval: `chord_stream_eval` everyday sounds and quiet strums.

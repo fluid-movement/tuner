@@ -1,0 +1,4 @@
+- [x] chord_stream_eval: talking, whistling, humming, hum and fan, quiet-room taps and noise bursts report no chords (5 min each)
+- [x] Real strums unchanged: chord_eval final notes 100%, strumming scenarios >= 97%, -20 dB quiet strums 100%
+- [x] Unit test: hummed notes, a talking pitch glide and a whistle glide give no chord
+- [x] Unit, lint and browser tests pass; wasm within budget

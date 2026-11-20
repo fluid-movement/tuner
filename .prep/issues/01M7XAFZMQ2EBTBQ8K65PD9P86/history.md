@@ -1,0 +1,1 @@
+- 2026-11-20T20:48:49Z claude-code: Check pass: chord_stream_eval everyday sounds 0/0/0/0/0 over 5 min each, noise 0; chord_eval 8192 95.8-96.5% notes, 16384 100%; quiet -20 dB 100%; cargo test 43+11, vitest 75, Playwright 22; wasm 135.2 KB / 51.3 KB gz.
