@@ -1,0 +1,1 @@
+- 2026-11-20T20:25:18Z claude-code: Check pass: vitest 62 theory tests (+ intonation), Playwright 22 and strum/chord specs 27/27 over 3 repeats, eslint/prettier/svelte-check clean.

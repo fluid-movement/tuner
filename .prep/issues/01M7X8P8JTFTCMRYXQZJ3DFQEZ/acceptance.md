@@ -1,0 +1,5 @@
+- [x] Key detection unit tests: C Am F G, C F G7 C, Dm G7 C, G D Em C, Am Dm E7 Am; ambiguous Am F C G gets low confidence
+- [x] Roman numerals for diatonic and borrowed chords in major and minor keys
+- [x] Suggestions follow common progressions, never repeat the current chord, and carry shapes; the shape finder covers every major, minor and dominant 7th chord
+- [x] e2e: looping C Am F G shows the key C major, numerals I vi IV V and suggests C I 0003 after G; repeats collapse with a count
+- [x] Unit, lint and browser tests pass

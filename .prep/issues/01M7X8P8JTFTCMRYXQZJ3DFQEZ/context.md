@@ -1,0 +1,1 @@
+Code: `web/src/lib/theory/key.ts` (+ spec), `romanNumeral` and `triad`/`numeralSuffix` in `web/src/lib/theory/chord.ts`, `ChordView.svelte` (`chord-key`, `chord-next`, history numerals and counts), `HistoryEntry` in `+page.svelte`, e2e `writeProgressionWav` / project `chord-uke-progression`.
