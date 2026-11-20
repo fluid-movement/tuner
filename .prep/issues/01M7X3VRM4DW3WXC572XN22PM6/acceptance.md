@@ -1,0 +1,5 @@
+- [x] Every one of the 4095 non-empty pitch-class sets gets a name with every note's role explained (vitest)
+- [x] Common and extended ukulele shapes name as expected (35 shapes incl. 0010 = Fadd9, 0000 = Am7 also C6); alternatives, roles, spelling, Roman numerals tested
+- [x] Chord view shows name, description, alternatives, note and role per string and keys (e2e with a strummed 0010)
+- [x] chord_eval with 48 chords incl. extended: notes right >= 99% at 16384 samples in all conditions
+- [x] wasm within budget; unit, lint and browser tests pass

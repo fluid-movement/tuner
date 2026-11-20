@@ -1,0 +1,1 @@
+Code: `web/src/lib/theory/chord.ts` (+ `chord.spec.ts`), `web/src/lib/components/ChordView.svelte`, `web/src/lib/wasm/tuner.ts` (`ChordResult.analysis`, computed in the strum worker), `crates/tuner-core/src/chord.rs` (`find_peaks`, `COMMON_UKULELE_SHAPES`), `crates/tuner-core/examples/chord_eval.rs`.
