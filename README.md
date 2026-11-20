@@ -2,6 +2,12 @@
 
 Browser tuner for acoustic guitar and ukulele. Pitch analysis runs in a Rust core compiled to WebAssembly inside an AudioWorklet; the UI is a SvelteKit 3 static site.
 
+The app listens as soon as it opens (browsers that need a gesture first show "Tap anywhere to start listening"). Three modes:
+
+- **Chord** (default, ukulele only): strum a chord; shows its name, a chord diagram and a tab, plus the last few chords.
+- **Strum**: strum all strings (or pluck one) to see each string's offset; the first reading comes ~0.2 s after the strum (ukulele; ~0.3 s on guitar), refines as more audio arrives, and keeps updating while the strings ring.
+- **String**: classic single-string tuner.
+
 - `crates/tuner-core`: pure Rust pitch analysis
 - `crates/tuner-wasm`: raw C-ABI WASM exports of the core
 - `web/`: SvelteKit app (pnpm)

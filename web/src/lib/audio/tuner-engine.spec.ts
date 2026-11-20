@@ -10,7 +10,7 @@ afterEach(() => {
 });
 
 it.each(['before init', 'during init'])(
-	'applies instrument changes %s after worker startup and ignores stopped workers',
+	'applies strum config changes %s after worker startup and ignores stopped workers',
 	async (timing) => {
 		const connect = vi.fn();
 		const node = { port: { postMessage: vi.fn(), onmessage: null }, connect };
@@ -24,7 +24,9 @@ it.each(['before init', 'during init'])(
 				createMediaStreamSource() {
 					return { connect: () => node };
 				}
-				resume = vi.fn();
+				state = 'running';
+				onstatechange = null;
+				resume = vi.fn(async () => {});
 				close = vi.fn();
 			}
 		);
@@ -66,38 +68,34 @@ it.each(['before init', 'during init'])(
 		}
 		vi.stubGlobal('Worker', FakeWorker);
 		const { startTuner } = await import('./tuner-engine.ts');
+		const guitar = { instrument: 'guitar', analysis: 'tuning' } as const;
+		const uke = { instrument: 'ukulele', analysis: 'chord' } as const;
 		const onStrum = vi.fn();
 		const engine = await startTuner({ onReading: vi.fn(), onStrum });
 		try {
 			// Switch while the main thread is still awaiting the WASM bytes.
-			const starting = engine.setStrum('guitar');
-			if (timing === 'before init') await engine.setStrum('ukulele');
+			const starting = engine.setStrum(guitar);
+			if (timing === 'before init') await engine.setStrum(uke);
 			await starting;
 			const worker = workers[0];
-			// Instrument commands during instantiation arrive before the listener exists.
-			if (timing === 'during init') await engine.setStrum('ukulele');
+			// Config commands during instantiation arrive before the listener exists.
+			if (timing === 'during init') await engine.setStrum(uke);
 			worker.postMessage.mockClear();
 			worker.onmessage?.({ data: { type: 'ready' } });
-			expect(worker.postMessage).toHaveBeenLastCalledWith({
-				type: 'instrument',
-				instrument: 'ukulele'
-			});
-			await engine.setStrum('guitar');
-			expect(worker.postMessage).toHaveBeenLastCalledWith({
-				type: 'instrument',
-				instrument: 'guitar'
-			});
-			const report = { onsetSeconds: 1, strings: [] };
+			expect(worker.postMessage).toHaveBeenLastCalledWith({ type: 'config', config: uke });
+			await engine.setStrum(guitar);
+			expect(worker.postMessage).toHaveBeenLastCalledWith({ type: 'config', config: guitar });
+			const report = { onsetSeconds: 1, settled: true, strings: [], chord: null };
 			// A completed report may already be queued when the selection changes.
-			worker.onmessage?.({ data: { type: 'strum', instrument: 'ukulele', report } });
+			worker.onmessage?.({ data: { type: 'strum', config: uke, report } });
 			expect(onStrum).not.toHaveBeenCalled();
-			worker.onmessage?.({ data: { type: 'strum', instrument: 'guitar', report } });
+			worker.onmessage?.({ data: { type: 'strum', config: guitar, report } });
 			expect(onStrum).toHaveBeenCalledWith(report);
 			onStrum.mockClear();
 			await engine.setStrum(null);
 			worker.postMessage.mockClear();
 			worker.onmessage?.({ data: { type: 'ready' } });
-			worker.onmessage?.({ data: { type: 'strum', instrument: 'guitar', report } });
+			worker.onmessage?.({ data: { type: 'strum', config: guitar, report } });
 			expect(worker.postMessage).not.toHaveBeenCalled();
 			expect(onStrum).not.toHaveBeenCalled();
 		} finally {

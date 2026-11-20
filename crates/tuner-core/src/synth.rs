@@ -220,6 +220,33 @@ pub fn random_strum(
         .collect()
 }
 
+/// A downstroke strum of a chord: string `i` sounds at fret `frets[i]`
+/// (`None` = muted), each detuned uniformly within ±`max_detune_cents`,
+/// with the playing variation of [`random_strum`].
+pub fn chord_strum(
+    instrument: Instrument,
+    frets: &[Option<u8>],
+    max_detune_cents: f32,
+    rng: &mut Rng,
+) -> Vec<PluckedString> {
+    let options = StrumOptions {
+        max_detune_cents,
+        ..StrumOptions::for_instrument(instrument)
+    };
+    let mut strum = random_strum(instrument, &options, rng);
+    for (s, fret) in strum.iter_mut().zip(frets) {
+        match fret {
+            Some(f) => {
+                s.frequency *= 2f32.powf(f32::from(*f) / 12.0);
+                // Fretted notes ring a little shorter.
+                s.decay *= 0.8f32.powf(f32::from(*f).min(5.0) / 5.0);
+            }
+            None => s.level = 0.0,
+        }
+    }
+    strum
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

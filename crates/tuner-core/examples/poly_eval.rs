@@ -2,6 +2,7 @@
 //!
 //! cargo run --release -p tuner-core --example poly_eval [method|all] [count] [scenario-filter]
 //!
+//! Set POLY_FRAME=<samples> to override the window length.
 //! Set POLY_DEBUG=1 to print strums whose error exceeds 5 cents.
 
 use std::time::Instant;
@@ -113,6 +114,11 @@ fn run(instrument: Instrument, method: Estimator, count: usize, sc: &Scenario) -
     };
     let mut rng = Rng::new(sc.name.len() as u64 * 7919 + instrument as u64);
     let debug = std::env::var("POLY_DEBUG").is_ok();
+    // POLY_FRAME overrides every scenario's window length (samples).
+    let frame = std::env::var("POLY_FRAME")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(sc.frame);
     let mut elapsed = 0.0;
     for _ in 0..count {
         let mut strum: Vec<PluckedString> = random_strum(instrument, &opts, &mut rng);
@@ -127,10 +133,10 @@ fn run(instrument: Instrument, method: Estimator, count: usize, sc: &Scenario) -
         }
         let last = strum.iter().map(|s| s.onset).fold(0.0, f32::max);
         let start = ((last + 0.08) * RATE) as usize;
-        let seconds = (start + sc.frame) as f32 / RATE + 0.01;
+        let seconds = (start + frame) as f32 / RATE + 0.01;
         let signal = render(&strum, RATE, seconds, sc.noise_rms, &mut rng);
         let t = Instant::now();
-        let est = method(&signal[start..start + sc.frame], instrument, &config);
+        let est = method(&signal[start..start + frame], instrument, &config);
         elapsed += t.elapsed().as_secs_f64();
 
         for (i, (e, s)) in est.iter().zip(&strum).enumerate() {

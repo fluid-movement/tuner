@@ -43,9 +43,9 @@
 		{#if report && age !== null}
 			Last strum {age < 1 ? 'just now' : `${Math.round(age)} s ago`} · strum again to re-check
 		{:else if listening}
-			Strum all strings
+			Strum all strings, or pluck one
 		{:else}
-			Press Start and strum all strings
+			Starting microphone…
 		{/if}
 	</p>
 	<ol>

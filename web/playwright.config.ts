@@ -38,6 +38,13 @@ export const STRUMS = {
 	}
 } as const;
 
+const UKULELE = [391.99544, 261.62557, 329.62756, 440];
+/** Ukulele chords strummed every 3 s (frets in string order G C E A). */
+export const CHORDS = {
+	'chord-uke-c': { name: 'C', frets: [0, 0, 0, 3] },
+	'chord-uke-g7': { name: 'G7', frets: [0, 2, 1, 2] }
+} as const;
+
 function fakeMic(name: string, write: (path: string) => void) {
 	const wav = fileURLToPath(new URL(`./test-results/fake-mic-${name}.wav`, import.meta.url));
 	write(wav);
@@ -79,6 +86,14 @@ export default defineConfig({
 						const c = strum.cents[i];
 						return c === null ? null : cents(f, c);
 					})
+				)
+			)
+		),
+		...Object.entries(CHORDS).map(([name, chord]) =>
+			fakeMic(name, (wav) =>
+				writeStrumWav(
+					wav,
+					chord.frets.map((f, i) => cents(UKULELE[i], 100 * f))
 				)
 			)
 		)

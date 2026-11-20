@@ -10,18 +10,24 @@
 		INSTRUMENTS,
 		Tunings,
 		instantiateTuner,
+		type ChordResult,
 		type Instrument,
 		type StrumReport,
 		type TrackReading
 	} from '#lib/wasm/tuner.ts';
+	import type { StrumConfig } from '#lib/audio/messages.ts';
 	import { InTuneLatch } from '#lib/tuner/in-tune.ts';
 	import CentsMeter from '#lib/components/CentsMeter.svelte';
 	import StringRow from '#lib/components/StringRow.svelte';
 	import Segmented from '#lib/components/Segmented.svelte';
 	import StrumView from '#lib/components/StrumView.svelte';
+	import ChordView from '#lib/components/ChordView.svelte';
 	import LevelMeter from '#lib/components/LevelMeter.svelte';
 
-	type Mode = 'string' | 'strum';
+	type Mode = 'chord' | 'strum' | 'string';
+	const MODES: readonly Mode[] = ['chord', 'strum', 'string'];
+	/** Chords kept in the history (structured, for key detection later). */
+	const HISTORY = 8;
 	const STORAGE_KEY = 'tuner.instrument';
 	const MODE_KEY = 'tuner.mode';
 	const INSTRUMENT_OPTIONS = [
@@ -29,14 +35,19 @@
 		{ value: 'ukulele', label: 'Ukulele' }
 	] as const;
 	const MODE_OPTIONS = [
-		{ value: 'string', label: 'String' },
-		{ value: 'strum', label: 'Strum' }
+		{ value: 'chord', label: 'Chord' },
+		{ value: 'strum', label: 'Strum' },
+		{ value: 'string', label: 'String' }
 	] as const;
 
 	let instrument = $state<Instrument>('guitar');
-	let mode = $state<Mode>('string');
-	/** Last strum report (kept until the next strum) and when it arrived. */
+	let mode = $state<Mode>('chord');
+	/** Last strum report (kept until the next strum) and when its strum began. */
 	let strum = $state<{ report: StrumReport; at: number } | null>(null);
+	/** Settled chords, oldest first. */
+	let chords = $state<ChordResult[]>([]);
+	/** Whether audio is flowing; false while the browser waits for a gesture. */
+	let running = $state(false);
 	let now = $state(0);
 	let tunings = $state<Tunings | null>(null);
 	let engine = $state<TunerEngine | null>(null);
@@ -61,7 +72,7 @@
 			const saved = localStorage.getItem(STORAGE_KEY);
 			if (INSTRUMENTS.includes(saved as Instrument)) instrument = saved as Instrument;
 			const savedMode = localStorage.getItem(MODE_KEY);
-			if (savedMode === 'string' || savedMode === 'strum') mode = savedMode;
+			if (MODES.includes(savedMode as Mode)) mode = savedMode as Mode;
 		} catch {
 			// Storage may be unavailable (private mode); the default is fine.
 		}
@@ -69,7 +80,9 @@
 			tunings = new Tunings(await instantiateTuner(await loadTunerBytes()));
 		} catch (err) {
 			error = describeStartError(err);
+			return;
 		}
+		await start();
 	});
 
 	$effect(() => {
@@ -81,13 +94,35 @@
 		}
 	});
 
-	// The strum check runs only in strum mode, for the selected instrument;
-	// results for another instrument don't apply.
+	// Strum analysis runs in strum mode (tuning, selected instrument) and
+	// chord mode (ukulele only for now); results for another setting don't
+	// apply.
+	let strumConfig = $derived<StrumConfig | null>(
+		mode === 'strum'
+			? { instrument, analysis: 'tuning' }
+			: mode === 'chord'
+				? { instrument: 'ukulele', analysis: 'chord' }
+				: null
+	);
 	$effect(() => {
-		const wanted = mode === 'strum' ? instrument : null;
+		const config = strumConfig;
 		strum = null;
-		engine?.setStrum(wanted).catch((err) => (error = describeStartError(err)));
+		engine?.setStrum(config).catch((err) => (error = describeStartError(err)));
 	});
+	let ukulele = $derived(tunings?.strings('ukulele') ?? []);
+
+	/** Onset of the last chord added to the history. */
+	let recordedOnset: number | null = null;
+
+	function onStrum(report: StrumReport) {
+		// Early and live reports refine the same strum: keep its start time.
+		const same = strum?.report.onsetSeconds === report.onsetSeconds;
+		strum = { report, at: same && strum ? strum.at : performance.now() };
+		if (report.chord && report.settled && recordedOnset !== report.onsetSeconds) {
+			recordedOnset = report.onsetSeconds;
+			chords = [...chords, report.chord].slice(-HISTORY);
+		}
+	}
 
 	// Ticks the "last strum" age.
 	$effect(() => {
@@ -98,14 +133,17 @@
 	});
 
 	async function start() {
+		if (starting || engine) return;
 		starting = true;
 		error = null;
 		try {
 			engine = await startTuner({
 				onReading: (r) => (reading = r),
-				onStrum: (report) => (strum = { report, at: performance.now() }),
+				onStrum,
+				onRunningChange: (r) => (running = r),
 				onError: (message) => (error = message)
 			});
+			running = engine.running;
 		} catch (err) {
 			error = describeStartError(err);
 		} finally {
@@ -113,19 +151,17 @@
 		}
 	}
 
-	async function stop() {
-		await engine?.stop();
-		engine = null;
-		reading = null;
-		strum = null;
+	/** Browsers that hold audio back until a gesture: the first tap starts it. */
+	function wake() {
+		engine?.resume().catch((err) => (error = describeStartError(err)));
 	}
 
 	onDestroy(() => engine?.stop());
 
 	const fmtCents = (c: number) => `${c >= 0 ? '+' : '−'}${Math.abs(c).toFixed(1)}`;
 	let status = $derived(
-		!engine
-			? 'Press Start and play a string'
+		!running
+			? 'Starting microphone…'
 			: !target
 				? 'Play a string'
 				: inTune
@@ -147,16 +183,27 @@
 		<Segmented label="Mode" options={MODE_OPTIONS} bind:value={mode} />
 	</header>
 	<div class="instrument">
-		<Segmented label="Instrument" options={INSTRUMENT_OPTIONS} bind:value={instrument} />
+		{#if mode === 'chord'}
+			<p class="only">Ukulele · standard tuning</p>
+		{:else}
+			<Segmented label="Instrument" options={INSTRUMENT_OPTIONS} bind:value={instrument} />
+		{/if}
 	</div>
 
 	<main>
-		{#if mode === 'strum'}
+		{#if mode === 'chord'}
+			<ChordView
+				strings={ukulele}
+				report={strum?.report ?? null}
+				history={chords.map((c) => c.name ?? '?')}
+				listening={running}
+			/>
+		{:else if mode === 'strum'}
 			<StrumView
 				{strings}
 				report={strum?.report ?? null}
 				age={strum ? Math.max(0, (now - strum.at) / 1000) : null}
-				listening={engine !== null}
+				listening={running}
 			/>
 		{:else}
 			<section class="readout" class:holding aria-live="polite">
@@ -188,7 +235,7 @@
 			<StringRow {strings} active={target?.string.index ?? null} {inTune} />
 		{/if}
 
-		{#if engine}
+		{#if running}
 			<LevelMeter levelDb={reading?.levelDb ?? null} floorDb={reading?.floorDb ?? null} />
 		{/if}
 
@@ -208,19 +255,21 @@
 		{/if}
 	</main>
 
-	<footer>
-		{#if engine}
-			<button class="primary" onclick={stop}>Stop</button>
-		{:else}
-			<button class="primary" onclick={start} disabled={starting || !tunings}>
-				{starting ? 'Starting…' : 'Start'}
-			</button>
-		{/if}
-		{#if error}
+	{#if error}
+		<footer>
 			<p role="alert">{error}</p>
-		{/if}
-	</footer>
+			{#if !engine && tunings}
+				<button class="primary" onclick={start} disabled={starting}>Try again</button>
+			{/if}
+		</footer>
+	{/if}
 </div>
+
+<svelte:window onpointerdown={() => engine && !running && wake()} />
+{#if engine && !running}
+	<!-- Taps go through to the page; any tap (window listener) starts audio. -->
+	<div class="wake" data-testid="wake" role="status">Tap anywhere to start listening</div>
+{/if}
 
 <style>
 	.app {
@@ -343,6 +392,27 @@
 	}
 	[role='alert'] {
 		color: var(--off);
-		margin: 12px 0 0;
+		margin: 0 0 12px;
+	}
+	.only {
+		margin: 0;
+		padding: 6px 0;
+		color: var(--muted);
+		font-weight: 500;
+	}
+	/* Some browsers start audio only after a gesture: one tap anywhere. */
+	.wake {
+		position: fixed;
+		inset: 0;
+		display: grid;
+		place-items: center;
+		padding: 16px;
+		text-align: center;
+		pointer-events: none;
+		background: color-mix(in srgb, var(--bg) 82%, transparent);
+		backdrop-filter: blur(3px);
+		color: var(--text);
+		font-size: 1.2rem;
+		font-weight: 600;
 	}
 </style>

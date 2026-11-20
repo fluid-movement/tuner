@@ -31,6 +31,12 @@ export interface TunerExports {
 	strum_frequency(handle: number, index: number): number;
 	strum_cents(handle: number, index: number): number;
 	strum_present(handle: number, index: number): number;
+	strum_set_analysis(handle: number, analysis: number): void;
+	strum_settled(handle: number): number;
+	strum_has_chord(handle: number): number;
+	strum_chord_fret(handle: number, index: number): number;
+	strum_chord_root(handle: number): number;
+	strum_chord_quality(handle: number): number;
 }
 
 /** Path of the module under static/, built by `pnpm build:wasm`. */
@@ -179,11 +185,44 @@ export interface StrumStringReading {
 	present: boolean | null;
 }
 
+/** What strums are analysed for (tuner-core `Analysis`). */
+export type StrumAnalysis = 'tuning' | 'chord';
+const ANALYSIS_IDS: Record<StrumAnalysis, number> = { tuning: 0, chord: 1 };
+
+/** Chord suffixes by tuner-core `Quality` discriminant. */
+const QUALITY_SUFFIXES = ['', 'm', '7', 'maj7', 'm7', 'sus2', 'sus4', 'dim', 'aug'];
+const ROOT_NAMES = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
+
+/** A recognised chord. */
+export interface ChordResult {
+	/** Fret per string in string order; null = muted / not played. */
+	frets: (number | null)[];
+	/** Name such as "Am7", or null if the notes form no known chord. */
+	name: string | null;
+	/** Root pitch class (0 = C) and suffix, for later key analysis. */
+	root: number | null;
+	quality: string | null;
+}
+
 export interface StrumReport {
 	/** Onset of the strum, seconds since listening started. */
 	onsetSeconds: number;
-	/** In string order of the instrument. */
+	/**
+	 * False for the quick early reports: readings may still move and strings
+	 * not heard yet show no reading. True once presence is final.
+	 */
+	settled: boolean;
+	/** In string order of the instrument (tuning analysis; empty for chords). */
 	strings: StrumStringReading[];
+	/** Chord analysis: the chord, or null if none was recognised. */
+	chord: ChordResult | null;
+}
+
+/** Name of a chord from its root pitch class and quality discriminant. */
+export function chordName(root: number, quality: number): string | null {
+	const suffix = QUALITY_SUFFIXES[quality];
+	if (root < 0 || suffix === undefined) return null;
+	return ROOT_NAMES[root % 12] + suffix;
 }
 
 /** tuner-core's StrumListener (run it in a Web Worker, not the worklet). */
@@ -192,6 +231,7 @@ export class WasmStrumListener {
 	readonly #chunk: number;
 	#handle: number;
 	#strings: number;
+	#analysis: StrumAnalysis = 'tuning';
 
 	constructor(exports: TunerExports, sampleRate: number, instrument: Instrument) {
 		this.#exports = exports;
@@ -203,6 +243,11 @@ export class WasmStrumListener {
 	setInstrument(instrument: Instrument): void {
 		this.#exports.strum_set_instrument(this.#handle, INSTRUMENT_IDS[instrument]);
 		this.#strings = this.#exports.tuner_string_count(INSTRUMENT_IDS[instrument]);
+	}
+
+	setAnalysis(analysis: StrumAnalysis): void {
+		this.#analysis = analysis;
+		this.#exports.strum_set_analysis(this.#handle, ANALYSIS_IDS[analysis]);
 	}
 
 	/** Feeds audio; returns a report when a strum's analysis has completed. */
@@ -220,9 +265,25 @@ export class WasmStrumListener {
 	#read(): StrumReport {
 		const e = this.#exports;
 		const h = this.#handle;
+		let chord: ChordResult | null = null;
+		if (e.strum_has_chord(h)) {
+			const root = e.strum_chord_root(h);
+			const quality = e.strum_chord_quality(h);
+			chord = {
+				frets: Array.from({ length: this.#strings }, (_, i) => {
+					const fret = e.strum_chord_fret(h, i);
+					return fret >= 0 ? fret : null;
+				}),
+				name: chordName(root, quality),
+				root: root >= 0 ? root : null,
+				quality: quality >= 0 ? (QUALITY_SUFFIXES[quality] ?? null) : null
+			};
+		}
 		return {
 			onsetSeconds: e.strum_onset(h),
-			strings: Array.from({ length: this.#strings }, (_, i) => {
+			settled: e.strum_settled(h) === 1,
+			chord,
+			strings: Array.from({ length: this.#analysis === 'chord' ? 0 : this.#strings }, (_, i) => {
 				const frequency = e.strum_frequency(h, i);
 				const cents = e.strum_cents(h, i);
 				const present = e.strum_present(h, i);

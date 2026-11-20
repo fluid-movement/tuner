@@ -1,4 +1,10 @@
-import type { Instrument, StrumReport, TrackReading } from '../wasm/tuner.ts';
+import type { Instrument, StrumAnalysis, StrumReport, TrackReading } from '../wasm/tuner.ts';
+
+/** What the strum worker listens for. */
+export interface StrumConfig {
+	instrument: Instrument;
+	analysis: StrumAnalysis;
+}
 
 /** Registered name of the AudioWorkletProcessor in tuner-processor.ts. */
 export const PROCESSOR_NAME = 'tuner-processor';
@@ -30,14 +36,14 @@ export type StrumWorkerControl =
 			type: 'init';
 			wasmBytes: ArrayBuffer;
 			sampleRate: number;
-			instrument: Instrument;
+			config: StrumConfig;
 			/** Audio chunks (Float32Array) from the processor arrive here. */
 			audio: MessagePort;
 	  }
-	| { type: 'instrument'; instrument: Instrument };
+	| { type: 'config'; config: StrumConfig };
 
 /** Messages from the strum worker. */
 export type StrumWorkerMessage =
 	| { type: 'ready' }
-	| { type: 'strum'; instrument: Instrument; report: StrumReport }
+	| { type: 'strum'; config: StrumConfig; report: StrumReport }
 	| { type: 'error'; message: string };

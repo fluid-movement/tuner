@@ -8,15 +8,11 @@ import {
 	type ProcessorControl,
 	type ProcessorMessage,
 	type ProcessorOptions,
+	type StrumConfig,
 	type StrumWorkerControl,
 	type StrumWorkerMessage
 } from './messages.ts';
-import {
-	TUNER_WASM_PATH,
-	type Instrument,
-	type StrumReport,
-	type TrackReading
-} from '../wasm/tuner.ts';
+import { TUNER_WASM_PATH, type StrumReport, type TrackReading } from '../wasm/tuner.ts';
 
 let bytes: Promise<ArrayBuffer> | undefined;
 
@@ -39,27 +35,34 @@ const HOP = 1024;
 export interface TunerEngine {
 	readonly sampleRate: number;
 	/**
-	 * Turns the strum check on for `instrument` (or switches its instrument),
-	 * or off with `null`. Reports arrive through `onStrum`.
+	 * Turns the strum analysis on with `config` (or changes it), or off with
+	 * `null`. Reports arrive through `onStrum`.
 	 */
-	setStrum(instrument: Instrument | null): Promise<void>;
+	setStrum(config: StrumConfig | null): Promise<void>;
+	/** Whether audio is flowing (false while the browser awaits a gesture). */
+	readonly running: boolean;
+	/** Starts audio if the browser held it back; call from a user gesture. */
+	resume(): Promise<void>;
 	stop(): Promise<void>;
 }
 
 export interface TunerEngineEvents {
 	onReading(reading: TrackReading): void;
 	onStrum?(report: StrumReport): void;
+	/** The audio context started or was suspended. */
+	onRunningChange?(running: boolean): void;
 	onError?(message: string): void;
 }
 
 /**
- * Starts listening. Call it from a user gesture (click, tap): browsers only
- * let an AudioContext start and ask for the microphone in response to one.
- * Rejects if the microphone is unavailable or permission is denied.
+ * Starts listening. Works without a user gesture: the microphone prompt
+ * appears straight away. Some browsers (iOS Safari) keep audio suspended
+ * until a gesture; then `running` is false and `resume()` must be called
+ * from one. Rejects if the microphone is unavailable or permission is denied.
  */
 export async function startTuner(events: TunerEngineEvents): Promise<TunerEngine> {
-	// Create the context synchronously inside the gesture.
 	const context = new AudioContext({ latencyHint: 'interactive' });
+	context.onstatechange = () => events.onRunningChange?.(context.state === 'running');
 	let stream: MediaStream | undefined;
 	try {
 		const wasm = loadTunerBytes();
@@ -88,7 +91,8 @@ export async function startTuner(events: TunerEngineEvents): Promise<TunerEngine
 			.connect(node)
 			.connect(mute)
 			.connect(context.destination);
-		await context.resume();
+		// Without a gesture, resume() may stay pending until one; don't wait.
+		context.resume().catch(() => {});
 
 		const tracks = stream.getTracks();
 		const control = (message: ProcessorControl, transfer: Transferable[] = []) =>
@@ -97,17 +101,19 @@ export async function startTuner(events: TunerEngineEvents): Promise<TunerEngine
 		// The strum check runs in a worker; the worklet forwards audio to it
 		// directly over a MessageChannel, so the main thread isn't involved.
 		let worker: Worker | null = null;
-		let strumInstrument: Instrument | null = null;
+		let strumConfig: StrumConfig | null = null;
+		const sameConfig = (a: StrumConfig, b: StrumConfig | null) =>
+			b !== null && a.instrument === b.instrument && a.analysis === b.analysis;
 		const stopStrum = () => {
 			control({ type: 'strum-port', port: null });
 			worker?.terminate();
 			worker = null;
 		};
-		const setStrum = async (instrument: Instrument | null) => {
-			strumInstrument = instrument;
-			if (instrument === null) return stopStrum();
+		const setStrum = async (config: StrumConfig | null) => {
+			strumConfig = config;
+			if (config === null) return stopStrum();
 			if (worker) {
-				worker.postMessage({ type: 'instrument', instrument } satisfies StrumWorkerControl);
+				worker.postMessage({ type: 'config', config } satisfies StrumWorkerControl);
 				return;
 			}
 			const created = new Worker(new URL('./strum-worker.ts', import.meta.url), {
@@ -116,14 +122,14 @@ export async function startTuner(events: TunerEngineEvents): Promise<TunerEngine
 			worker = created;
 			created.onmessage = ({ data }: MessageEvent<StrumWorkerMessage>) => {
 				if (worker !== created) return;
-				if (data.type === 'ready' && strumInstrument !== null) {
-					// Instrument messages during WASM startup can arrive before
-					// the listener exists. Apply the latest selection once ready.
+				if (data.type === 'ready' && strumConfig !== null) {
+					// Config messages during WASM startup can arrive before the
+					// listener exists. Apply the latest selection once ready.
 					created.postMessage({
-						type: 'instrument',
-						instrument: strumInstrument
+						type: 'config',
+						config: strumConfig
 					} satisfies StrumWorkerControl);
-				} else if (data.type === 'strum' && data.instrument === strumInstrument) {
+				} else if (data.type === 'strum' && sameConfig(data.config, strumConfig)) {
 					events.onStrum?.(data.report);
 				} else if (data.type === 'error') events.onError?.(data.message);
 			};
@@ -134,7 +140,7 @@ export async function startTuner(events: TunerEngineEvents): Promise<TunerEngine
 				type: 'init',
 				wasmBytes,
 				sampleRate: context.sampleRate,
-				instrument,
+				config,
 				audio: channel.port2
 			};
 			created.postMessage(init, [channel.port2, wasmBytes]);
@@ -144,8 +150,15 @@ export async function startTuner(events: TunerEngineEvents): Promise<TunerEngine
 		return {
 			sampleRate: context.sampleRate,
 			setStrum,
+			get running() {
+				return context.state === 'running';
+			},
+			async resume() {
+				await context.resume();
+			},
 			async stop() {
 				stopStrum();
+				context.onstatechange = null;
 				node.port.onmessage = null;
 				tracks.forEach((t) => t.stop());
 				await context.close();

@@ -4,13 +4,14 @@
 //! and are not judged.
 //!
 //! cargo run --release -p tuner-core --example presence_eval [count]
+//!
+//! Set POLY_FRAME=<samples> to override the window length.
 
 use tuner_core::poly::{PolyConfig, estimate_strum};
 use tuner_core::synth::{PluckedString, Rng, StrumOptions, highpass, random_strum, render};
 use tuner_core::tuning::Instrument;
 
 const RATE: f32 = 48_000.0;
-const POST: usize = 32_768;
 
 fn q(v: &mut [f32], p: f32) -> f32 {
     if v.is_empty() {
@@ -25,6 +26,11 @@ fn main() {
         .nth(1)
         .and_then(|s| s.parse().ok())
         .unwrap_or(200);
+    // POLY_FRAME overrides the analysis window length (samples).
+    let frame: usize = std::env::var("POLY_FRAME")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(32_768);
     for instrument in [Instrument::Guitar, Instrument::Ukulele] {
         for previous in [true, false] {
             let n = instrument.strings().len();
@@ -63,7 +69,7 @@ fn main() {
                 let mut x = render(&notes, RATE, last + 1.0, 0.002, &mut rng);
                 highpass(&mut x, 100.0, RATE);
                 let start = ((last + 0.08) * RATE) as usize;
-                let post = &x[start..start + POST];
+                let post = &x[start..start + frame];
                 let est = estimate_strum(post, instrument, &PolyConfig::new(RATE, instrument));
                 for (i, e) in est.iter().enumerate() {
                     let Some(e) = e else { continue };

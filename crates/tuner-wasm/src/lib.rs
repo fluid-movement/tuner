@@ -7,6 +7,7 @@
 //! `tuner_input(handle)` in linear memory, call `tuner_process(handle)` (the
 //! display state) and read `tuner_frequency(handle)` and the other getters.
 
+use tuner_core::strum::Analysis;
 use tuner_core::tuning::cents_between;
 use tuner_core::{Instrument, MonoTuner, Note, StrumListener, StrumReport, TrackerOutput};
 
@@ -353,6 +354,85 @@ pub unsafe extern "C" fn strum_present(strum: *const Strum, index: u32) -> i32 {
     }
 }
 
+/// Switches what strums are analysed for: 0 tuning, 1 chord; unknown ids
+/// are ignored.
+///
+/// # Safety
+///
+/// `strum` must be a live handle from [`strum_new`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn strum_set_analysis(strum: *mut Strum, id: u32) {
+    let analysis = match id {
+        0 => Analysis::Tuning,
+        1 => Analysis::Chord,
+        _ => return,
+    };
+    unsafe { &mut *strum }.listener.set_analysis(analysis);
+}
+
+/// 1 if the last report is settled (string presence final), else 0.
+///
+/// # Safety
+///
+/// `strum` must be a live handle from [`strum_new`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn strum_settled(strum: *const Strum) -> u32 {
+    unsafe { &*strum }.last.as_ref().is_some_and(|r| r.settled) as u32
+}
+
+fn strum_chord(strum: &Strum) -> Option<&tuner_core::ChordReading> {
+    strum.last.as_ref()?.chord.as_ref()
+}
+
+/// 1 if the last report holds a chord (chord analysis), else 0.
+///
+/// # Safety
+///
+/// `strum` must be a live handle from [`strum_new`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn strum_has_chord(strum: *const Strum) -> u32 {
+    strum_chord(unsafe { &*strum }).is_some() as u32
+}
+
+/// Fret of string `index` in the last chord: -1 muted, -2 no chord.
+///
+/// # Safety
+///
+/// `strum` must be a live handle from [`strum_new`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn strum_chord_fret(strum: *const Strum, index: u32) -> i32 {
+    match strum_chord(unsafe { &*strum }).and_then(|c| c.frets.get(index as usize)) {
+        Some(Some(f)) => i32::from(*f),
+        Some(None) => -1,
+        None => -2,
+    }
+}
+
+/// Root pitch class (0 = C) of the last chord, -1 if it has no name.
+///
+/// # Safety
+///
+/// `strum` must be a live handle from [`strum_new`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn strum_chord_root(strum: *const Strum) -> i32 {
+    strum_chord(unsafe { &*strum })
+        .and_then(|c| c.name)
+        .map_or(-1, |n| i32::from(n.root))
+}
+
+/// Quality of the last chord (`tuner_core::Quality` discriminant), -1 if it
+/// has no name.
+///
+/// # Safety
+///
+/// `strum` must be a live handle from [`strum_new`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn strum_chord_quality(strum: *const Strum) -> i32 {
+    strum_chord(unsafe { &*strum })
+        .and_then(|c| c.name)
+        .map_or(-1, |n| n.quality as i32)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -466,13 +546,35 @@ mod tests {
                 std::slice::from_raw_parts_mut(strum_input(s), c.len()).copy_from_slice(c);
                 reports += strum_push(s, c.len() as u32);
             }
-            assert_eq!(reports, 1);
+            // Staged reports, then live updates while the strum rings.
+            assert!(reports >= 3, "{reports} reports");
+            assert_eq!(strum_settled(s), 1);
+            assert_eq!(strum_has_chord(s), 0);
             assert!((strum_onset(s) - 0.5).abs() < 0.05);
             for i in 0..4 {
                 assert_eq!(strum_present(s, i), 1);
                 assert!(strum_cents(s, i).abs() < 3.0, "{}", strum_cents(s, i));
             }
             assert!(strum_cents(s, 9).is_nan());
+
+            // The same strum, analysed as a chord: Am7 (0000).
+            strum_set_analysis(s, 1);
+            let y = render(&notes, rate, 2.0, 0.002, &mut rng);
+            for c in y.chunks(chunk) {
+                std::slice::from_raw_parts_mut(strum_input(s), c.len()).copy_from_slice(c);
+                strum_push(s, c.len() as u32);
+            }
+            assert_eq!(strum_has_chord(s), 1);
+            assert_eq!(strum_settled(s), 1);
+            for i in 0..4 {
+                assert_eq!(strum_chord_fret(s, i), 0);
+            }
+            assert_eq!(strum_chord_fret(s, 4), -2);
+            assert_eq!(strum_chord_root(s), 9);
+            assert_eq!(
+                strum_chord_quality(s),
+                tuner_core::Quality::MinorSeventh as i32
+            );
             strum_free(s);
         }
     }

@@ -1,29 +1,33 @@
-// Web Worker running the strum check (tuner-core StrumListener in its own
+// Web Worker running the strum analysis (tuner-core StrumListener in its own
 // WASM instance). An analysis takes several milliseconds, too long for the
 // audio thread: the worklet only forwards audio chunks over a MessagePort.
 
-import type { StrumWorkerControl, StrumWorkerMessage } from './messages.ts';
+import type { StrumConfig, StrumWorkerControl, StrumWorkerMessage } from './messages.ts';
 import { WasmStrumListener, instantiateTuner } from '../wasm/tuner.ts';
-import type { Instrument } from '../wasm/tuner.ts';
 
 let listener: WasmStrumListener | null = null;
-let instrument: Instrument = 'guitar';
+let config: StrumConfig = { instrument: 'ukulele', analysis: 'chord' };
 
 const post = (message: StrumWorkerMessage) => self.postMessage(message);
 
+function apply(next: StrumConfig) {
+	config = next;
+	listener?.setInstrument(next.instrument);
+	listener?.setAnalysis(next.analysis);
+}
+
 self.onmessage = async ({ data }: MessageEvent<StrumWorkerControl>) => {
-	if (data.type === 'instrument') {
-		instrument = data.instrument;
-		listener?.setInstrument(data.instrument);
+	if (data.type === 'config') {
+		apply(data.config);
 		return;
 	}
 	try {
-		instrument = data.instrument;
 		const exports = await instantiateTuner(data.wasmBytes);
-		listener = new WasmStrumListener(exports, data.sampleRate, instrument);
+		listener = new WasmStrumListener(exports, data.sampleRate, data.config.instrument);
+		apply(data.config);
 		data.audio.onmessage = ({ data: chunk }: MessageEvent<Float32Array>) => {
 			const report = listener?.push(chunk);
-			if (report) post({ type: 'strum', instrument, report });
+			if (report) post({ type: 'strum', config, report });
 		};
 		post({ type: 'ready' });
 	} catch (err) {

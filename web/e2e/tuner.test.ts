@@ -1,9 +1,9 @@
 import { expect, test, type Page } from '@playwright/test';
+import { open } from './open.ts';
 
 async function listen(page: Page, instrument: 'Guitar' | 'Ukulele' = 'Guitar') {
-	await page.goto('/');
+	await open(page, 'String');
 	await page.getByRole('radio', { name: instrument }).check({ force: true });
-	await page.getByRole('button', { name: 'Start' }).click();
 }
 
 test('an in-tune low E lights up E2 @e2', async ({ page }) => {
@@ -39,6 +39,7 @@ test('a C4 on ukulele lights up its C string @c4', async ({ page }) => {
 
 test('the instrument choice survives a reload @a2', async ({ page }) => {
 	await page.goto('/');
+	await page.getByRole('radio', { name: 'String', exact: true }).check({ force: true });
 	const strings = page.getByRole('list', { name: 'Strings' }).getByRole('listitem');
 	await expect(strings).toHaveText(['E2', 'A2', 'D3', 'G3', 'B3', 'E4']);
 	await page.getByRole('radio', { name: 'Ukulele' }).check({ force: true });
@@ -62,8 +63,7 @@ test('fits a 375 px phone screen without horizontal scrolling @a2', async ({ pag
 });
 
 test('a quiet decaying pluck stays on screen through its decay @pluck', async ({ page }) => {
-	await page.goto('/?debug');
-	await page.getByRole('button', { name: 'Start' }).click();
+	await open(page, 'String', '/?debug');
 	const note = page.getByTestId('note');
 	await expect(note).toHaveText('A2', { timeout: 10_000 });
 	await expect(page.getByTestId('level')).toBeVisible();

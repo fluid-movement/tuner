@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
-import { STRUMS } from '../playwright.config.ts';
+import { CHORDS, STRUMS } from '../playwright.config.ts';
+import { open } from './open.ts';
 
 /** Expected verdict for a string offset (null: muted). */
 function expected(cents: number | null) {
@@ -9,11 +10,8 @@ function expected(cents: number | null) {
 }
 
 async function strumCheck(page: Page, instrument: 'Guitar' | 'Ukulele') {
-	await page.goto('/');
-	await page.getByRole('radio', { name: 'Strum' }).check({ force: true });
+	await open(page, 'Strum');
 	await page.getByRole('radio', { name: instrument }).check({ force: true });
-	await expect(page.getByTestId('strum-status')).toHaveText('Press Start and strum all strings');
-	await page.getByRole('button', { name: 'Start' }).click();
 }
 
 for (const [name, strum] of Object.entries(STRUMS)) {
@@ -30,10 +28,15 @@ for (const [name, strum] of Object.entries(STRUMS)) {
 				expect(Math.abs(shown - c), `${string} cents`).toBeLessThanOrEqual(3);
 			}
 		}
-		const rows = page.locator('[data-testid^="strum-"][data-verdict]');
-		const held = await rows.allTextContents();
+		const verdicts = () =>
+			page
+				.locator('[data-testid^="strum-"][data-verdict]')
+				.evaluateAll((rows) => rows.map((r) => r.getAttribute('data-verdict')));
+		// Settled by now (early reports may still show strings as pending).
+		await expect(page.getByTestId('strum-status')).toContainText('Last strum 1 s ago');
+		const held = await verdicts();
 		await expect(page.getByTestId('strum-status')).toContainText('Last strum 2 s ago');
-		expect(await rows.allTextContents()).toEqual(held);
+		expect(await verdicts()).toEqual(held);
 		// The looping microphone strums again every three seconds.
 		await expect(page.getByTestId('strum-status')).toContainText('Last strum just now');
 	});
@@ -41,9 +44,27 @@ for (const [name, strum] of Object.entries(STRUMS)) {
 
 test('strum mode and instrument are remembered @strum-guitar', async ({ page }) => {
 	await page.goto('/');
-	await page.getByRole('radio', { name: 'Strum' }).check({ force: true });
+	await page.getByRole('radio', { name: 'Strum', exact: true }).check({ force: true });
 	await page.getByRole('radio', { name: 'Ukulele' }).check({ force: true });
 	await page.reload();
-	await expect(page.getByRole('radio', { name: 'Strum' })).toBeChecked();
+	await expect(page.getByRole('radio', { name: 'Strum', exact: true })).toBeChecked();
 	await expect(page.getByTestId('strum-G4')).toBeVisible();
 });
+
+for (const [name, chord] of Object.entries(CHORDS)) {
+	test(`chord mode names a strummed ${chord.name} and shows its tab @${name}`, async ({ page }) => {
+		await open(page, 'Chord');
+		await expect(page.getByTestId('chord-name')).toHaveText(chord.name, { timeout: 15_000 });
+		// Highest string on top: A E C G.
+		const tab = [...chord.frets]
+			.map((f, i) => `${'GCEA'[i]}|-${String(f).padEnd(2, '-')}-|`)
+			.reverse()
+			.join('\n');
+		await expect(page.getByTestId('chord-tab')).toHaveText(tab);
+		// The looping microphone strums again every three seconds.
+		await expect(page.getByTestId('chord-history').locator('li')).toHaveCount(2, {
+			timeout: 10_000
+		});
+		await expect(page.getByTestId('chord-history')).toContainText(chord.name);
+	});
+}
