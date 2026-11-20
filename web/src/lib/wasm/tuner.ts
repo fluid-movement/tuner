@@ -17,6 +17,7 @@ export interface TunerExports {
 	tuner_input(handle: number): number;
 	tuner_process(handle: number): number;
 	tuner_reset(handle: number): void;
+	tuner_set_pitch(handle: number, on: number): void;
 	tuner_frequency(handle: number): number;
 	tuner_raw_frequency(handle: number): number;
 	tuner_clarity(handle: number): number;
@@ -111,6 +112,14 @@ export class WasmMonoTuner {
 
 	reset(): void {
 		this.#exports.tuner_reset(this.#handle);
+	}
+
+	/**
+	 * Pitch detection on (default) or off: off, frames only update the level
+	 * and noise floor (much cheaper; for the meter in strum and chord mode).
+	 */
+	setPitch(on: boolean): void {
+		this.#exports.tuner_set_pitch(this.#handle, on ? 1 : 0);
 	}
 
 	free(): void {

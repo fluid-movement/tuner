@@ -41,7 +41,7 @@
 	.fill {
 		height: 100%;
 		background: var(--muted);
-		transition: width 60ms linear;
+		transition: width 90ms linear;
 	}
 	.fill.strong {
 		background: var(--accent);

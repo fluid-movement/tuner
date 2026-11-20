@@ -29,6 +29,10 @@ class TunerProcessor extends AudioWorkletProcessor {
 	#frames: FrameAccumulator | null = null;
 	/** Forwards raw audio to the strum worker while strum mode is on. */
 	#strumPort: MessagePort | null = null;
+	/** Pitch detection wanted (applied once the tuner exists). */
+	#pitch = true;
+	/** Frames since the last level-only post (see `process`). */
+	#skipped = 0;
 	readonly #strumChunks = new FrameAccumulator(STRUM_CHUNK, STRUM_CHUNK);
 
 	constructor(options: { processorOptions: ProcessorOptions }) {
@@ -36,10 +40,15 @@ class TunerProcessor extends AudioWorkletProcessor {
 		const { wasmBytes, hop } = options.processorOptions;
 		this.port.onmessage = ({ data }: MessageEvent<ProcessorControl>) => {
 			if (data.type === 'strum-port') this.#strumPort = data.port;
+			else if (data.type === 'pitch') {
+				this.#pitch = data.on;
+				this.#tuner?.setPitch(data.on);
+			}
 		};
 		instantiateTuner(wasmBytes).then(
 			(exports) => {
 				this.#tuner = new WasmMonoTuner(exports, sampleRate, hop);
+				this.#tuner.setPitch(this.#pitch);
 				this.#frames = new FrameAccumulator(this.#tuner.frameSize, hop);
 				this.#post({ type: 'ready', frameSize: this.#tuner.frameSize });
 			},
@@ -57,7 +66,11 @@ class TunerProcessor extends AudioWorkletProcessor {
 		const tuner = this.#tuner;
 		if (channel && tuner && this.#frames) {
 			this.#frames.push(channel, (frame) => {
-				this.#post({ type: 'track', reading: tuner.process(frame) });
+				const reading = tuner.process(frame);
+				// Level only (strum and chord modes): every other frame is
+				// plenty for the meter and halves the main thread's renders.
+				if (!this.#pitch && this.#skipped++ % 2 === 0) return;
+				this.#post({ type: 'track', reading });
 			});
 		}
 		return true;

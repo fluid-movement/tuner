@@ -25,7 +25,9 @@ export type ProcessorMessage =
 /** Messages from the main thread to the processor. */
 export type ProcessorControl =
 	/** Forward audio to the strum worker over this port (null: stop). */
-	{ type: 'strum-port'; port: MessagePort | null };
+	| { type: 'strum-port'; port: MessagePort | null }
+	/** Single-note pitch detection on, or level only (strum and chord modes). */
+	| { type: 'pitch'; on: boolean };
 
 /** Samples per chunk forwarded to the strum worker. */
 export const STRUM_CHUNK = 1024;

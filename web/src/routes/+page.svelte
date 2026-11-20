@@ -104,6 +104,10 @@
 				? { instrument: 'ukulele', analysis: 'chord' }
 				: null
 	);
+	// The single-note tracker only runs in string mode.
+	$effect(() => {
+		engine?.setPitch(mode === 'string');
+	});
 	$effect(() => {
 		const config = strumConfig;
 		strum = null;

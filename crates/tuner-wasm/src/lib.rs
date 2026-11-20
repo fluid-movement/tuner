@@ -16,6 +16,8 @@ pub struct Tuner {
     mono: MonoTuner,
     input: Vec<f32>,
     last: Option<TrackerOutput>,
+    /// Whether frames get pitch detection or only a level measurement.
+    pitch: bool,
 }
 
 /// Returns [`tuner_core::VERSION`].
@@ -90,6 +92,7 @@ pub extern "C" fn tuner_new(sample_rate: f32, hop: u32) -> *mut Tuner {
         mono,
         input,
         last: None,
+        pitch: true,
     }))
 }
 
@@ -132,9 +135,30 @@ pub unsafe extern "C" fn tuner_input(tuner: *mut Tuner) -> *mut f32 {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn tuner_process(tuner: *mut Tuner) -> u32 {
     let tuner = unsafe { &mut *tuner };
-    let out = tuner.mono.process(&tuner.input);
+    let out = if tuner.pitch {
+        tuner.mono.process(&tuner.input)
+    } else {
+        tuner.mono.process_level(&tuner.input)
+    };
     tuner.last = Some(out);
     out.state as u32
+}
+
+/// Turns pitch detection on (1, the default) or off (0: frames only update
+/// the level and noise floor, for the level meter while strum or chord
+/// analysis runs elsewhere). Turning it off forgets the tracked note.
+///
+/// # Safety
+///
+/// `tuner` must be a live handle from [`tuner_new`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tuner_set_pitch(tuner: *mut Tuner, on: u32) {
+    let tuner = unsafe { &mut *tuner };
+    let on = on != 0;
+    if tuner.pitch && !on {
+        tuner.mono.reset();
+    }
+    tuner.pitch = on;
 }
 
 /// Forgets the tracked note and the noise floor.
@@ -500,6 +524,32 @@ mod tests {
 
             tuner_reset(t);
             assert_eq!(tuner_frequency(t), 0.0);
+            tuner_free(t);
+        }
+    }
+
+    #[test]
+    fn level_only_mode_skips_pitch() {
+        let rate = 48_000.0;
+        unsafe {
+            let t = tuner_new(rate, 1024);
+            let n = tuner_frame_size(t) as usize;
+            let input = std::slice::from_raw_parts_mut(tuner_input(t), n);
+            for (i, x) in input.iter_mut().enumerate() {
+                *x = 0.3 * (TAU * 110.0 * i as f32 / rate).sin();
+            }
+            tuner_set_pitch(t, 0);
+            for _ in 0..5 {
+                assert_eq!(tuner_process(t), 0, "no tracking without pitch");
+            }
+            assert!(tuner_level_db(t) > -15.0, "level still measured");
+            tuner_set_pitch(t, 1);
+            // Already sounding (no attack): locks via the steady path, 0.15 s.
+            let mut state = 0;
+            for _ in 0..12 {
+                state = tuner_process(t);
+            }
+            assert_eq!(state, 1, "tracks again with pitch on");
             tuner_free(t);
         }
     }

@@ -474,6 +474,20 @@ impl MonoTuner {
         out
     }
 
+    /// Measures only the frame's level (no pitch detection): for the level
+    /// meter while another mode does the analysis. Much cheaper than
+    /// [`process`](Self::process); the tracker sees an unpitched frame.
+    pub fn process_level(&mut self, frame: &[f32]) -> TrackerOutput {
+        let n = frame.len().max(1) as f64;
+        let mean = frame.iter().map(|&x| f64::from(x)).sum::<f64>() / n;
+        let power = frame
+            .iter()
+            .map(|&x| (f64::from(x) - mean).powi(2))
+            .sum::<f64>()
+            / n;
+        self.tracker.push(None, power.sqrt() as f32)
+    }
+
     fn cutoff_for(&self, frequency: Option<f32>, state: TrackState) -> Option<f32> {
         match (state, frequency, self.default_lowpass) {
             (TrackState::Tracking | TrackState::Holding, Some(f), Some(default)) => Some(

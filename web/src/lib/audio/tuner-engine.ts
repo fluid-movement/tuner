@@ -39,6 +39,11 @@ export interface TunerEngine {
 	 * `null`. Reports arrive through `onStrum`.
 	 */
 	setStrum(config: StrumConfig | null): Promise<void>;
+	/**
+	 * Single-note pitch detection on the audio thread: needed in string mode
+	 * only; off, the worklet just measures the level for the meter.
+	 */
+	setPitch(on: boolean): void;
 	/** Whether audio is flowing (false while the browser awaits a gesture). */
 	readonly running: boolean;
 	/** Starts audio if the browser held it back; call from a user gesture. */
@@ -150,6 +155,7 @@ export async function startTuner(events: TunerEngineEvents): Promise<TunerEngine
 		return {
 			sampleRate: context.sampleRate,
 			setStrum,
+			setPitch: (on: boolean) => control({ type: 'pitch', on }),
 			get running() {
 				return context.state === 'running';
 			},
