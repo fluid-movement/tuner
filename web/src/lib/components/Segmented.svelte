@@ -22,11 +22,16 @@
 	.toggle {
 		display: inline-flex;
 		padding: 3px;
+		min-height: 44px;
 		border-radius: 999px;
 		background: var(--line);
 	}
 	label {
-		padding: 6px 14px;
+		/* At least 44 px tall: a comfortable touch target. */
+		min-height: 38px;
+		display: inline-flex;
+		align-items: center;
+		padding: 0 16px;
 		border-radius: 999px;
 		cursor: pointer;
 		color: var(--muted);

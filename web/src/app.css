@@ -44,3 +44,20 @@ body {
 button {
 	font: inherit;
 }
+
+/* Phone ergonomics: no double-tap zoom or grey tap flash, no accidental
+   text selection on controls, no rubber-band reloads. */
+html {
+	-webkit-text-size-adjust: 100%;
+	text-size-adjust: 100%;
+	-webkit-tap-highlight-color: transparent;
+	touch-action: manipulation;
+	overscroll-behavior: none;
+}
+
+button,
+label,
+[role='radiogroup'] {
+	user-select: none;
+	-webkit-user-select: none;
+}

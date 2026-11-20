@@ -85,7 +85,7 @@
 		{:else if report}
 			Strum the next chord
 		{:else if listening}
-			Strum a chord
+			Strum a chord on your ukulele
 		{:else}
 			Starting microphone…
 		{/if}
@@ -372,5 +372,34 @@
 	.history li:last-child {
 		background: var(--accent);
 		color: #fff;
+	}
+	/* Short phone screens: everything fits without scrolling. */
+	@media (max-height: 700px) {
+		.chord {
+			padding: 12px;
+			gap: 8px;
+		}
+		.name {
+			font-size: 3.4rem;
+		}
+		.diagram {
+			width: 124px;
+		}
+		.tab {
+			font-size: 0.95rem;
+		}
+	}
+	/* Tall phones: use the room for a bigger name and diagram. */
+	@media (min-height: 800px) {
+		.chord {
+			gap: 16px;
+			padding: 20px 16px;
+		}
+		.diagram {
+			width: 176px;
+		}
+		.tab {
+			font-size: 1.2rem;
+		}
 	}
 </style>

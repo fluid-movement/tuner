@@ -192,13 +192,11 @@
 		<h1>Tuner</h1>
 		<Segmented label="Mode" options={MODE_OPTIONS} bind:value={mode} />
 	</header>
-	<div class="instrument">
-		{#if mode === 'chord'}
-			<p class="only">Ukulele · standard tuning</p>
-		{:else}
+	{#if mode !== 'chord'}
+		<div class="instrument">
 			<Segmented label="Instrument" options={INSTRUMENT_OPTIONS} bind:value={instrument} />
-		{/if}
-	</div>
+		</div>
+	{/if}
 
 	<main>
 		{#if mode === 'chord'}
@@ -290,10 +288,12 @@
 		min-height: 100dvh;
 		max-width: 560px;
 		margin: 0 auto;
-		padding: 16px;
+		/* Clear the notch and home indicator when installed. */
+		padding: max(12px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right))
+			max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
 		display: flex;
 		flex-direction: column;
-		gap: 20px;
+		gap: 14px;
 	}
 	.instrument {
 		display: flex;
@@ -313,8 +313,10 @@
 		flex: 1;
 		display: flex;
 		flex-direction: column;
-		justify-content: center;
-		gap: 24px;
+		/* Top-aligned: on a phone the reading sits where the eye lands,
+		   without a band of empty space above it. */
+		justify-content: flex-start;
+		gap: 16px;
 	}
 	.readout {
 		transition: opacity 200ms;
@@ -407,12 +409,6 @@
 	[role='alert'] {
 		color: var(--off);
 		margin: 0 0 12px;
-	}
-	.only {
-		margin: 0;
-		padding: 6px 0;
-		color: var(--muted);
-		font-weight: 500;
 	}
 	/* Some browsers start audio only after a gesture: one tap anywhere. */
 	.wake {
