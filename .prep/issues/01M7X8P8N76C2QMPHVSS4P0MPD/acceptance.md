@@ -1,0 +1,4 @@
+- [x] chord_eval: string cents |error| p99 <= 1 c on measurable strings
+- [x] Unit tests for offStrings/describeOff; wasm test for strum_chord_cents
+- [x] e2e: a C with the C string 22 c flat shows 'C string ~22 c flat' and Tune switches to Strum mode
+- [x] Unit, lint and browser tests pass; wasm within budget
