@@ -23,6 +23,7 @@
 	import StrumView from '#lib/components/StrumView.svelte';
 	import ChordView from '#lib/components/ChordView.svelte';
 	import LevelMeter from '#lib/components/LevelMeter.svelte';
+	import { keepScreenOn } from '#lib/wake-lock.ts';
 
 	type Mode = 'chord' | 'strum' | 'string';
 	const MODES: readonly Mode[] = ['chord', 'strum', 'string'];
@@ -123,6 +124,11 @@
 			chords = [...chords, report.chord].slice(-HISTORY);
 		}
 	}
+
+	// Keep the screen on while listening.
+	$effect(() => {
+		if (running) return keepScreenOn();
+	});
 
 	// Ticks the "last strum" age.
 	$effect(() => {

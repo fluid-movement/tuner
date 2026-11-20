@@ -2,10 +2,20 @@
 title: PWA and offline support
 kind: code
 parent: 01M509SB0RMTVQ2PY4M21KKQAA
-depends_on:
-  - 01M509SBJQQPMA0QNE3B4J1X41
+tags:
+  - pwa
+priority: high
 ---
 
-Make the app installable and usable offline: manifest, icons, service worker caching the app shell, WASM and worklet files.
+## Requirement
+
+Make the app installable and usable offline; Chrome should offer to install it.
+
+- Manifest: name and short name "Tuner", standalone display, portrait, theme and background colours from the app theme, start URL and scope at the site root.
+- Icons: a simple tuning-fork motif in the accent blue, 192 and 512 px PNG plus a maskable 512 px variant (Android adaptive icons) and a 180 px Apple touch icon; the favicon matches.
+- Offline: a service worker precaches the app shell, built JS/CSS (including the worklet and strum worker), the WASM and the icons; the app opens and listens with no network. Each deploy gets a new cache and drops the old one; updates apply silently on the next launch (no banner).
+- Screen wake lock while listening (where supported), re-acquired when the page becomes visible again.
+
+Name stays "Tuner" (user, 2026-11-20).
 
 ## Open questions
