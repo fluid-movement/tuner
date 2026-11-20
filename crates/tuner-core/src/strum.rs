@@ -19,8 +19,10 @@
 //! Not for the audio thread: an analysis takes several milliseconds.
 
 use crate::chord::{ChordReading, detect_chord};
+use crate::fft::Fft;
 use crate::poly::{PRESENT_PROMINENCE_DB, PolyConfig, estimate_strum};
 use crate::tuning::Instrument;
+use num_complex::Complex32;
 
 const HOP_SECONDS: f32 = 0.01;
 const RISE_DB: f32 = 8.0;
@@ -32,6 +34,25 @@ const MERGE_SECONDS: f32 = 0.08;
 const DELAY_SECONDS: f32 = 0.12;
 /// Time constant with which the background rises (it falls immediately).
 const BACKGROUND_RISE_SECONDS: f32 = 2.0;
+/// Spectral flux: each hop, the spectrum of the last `FLUX_FRAME` samples
+/// is compared with the one `FLUX_LAG` hops earlier; the flux is the mean
+/// rise (dB, clamped to a range below the loudest bin) over 80 Hz–4 kHz.
+/// Re-strumming over ringing strings barely raises the level but brings
+/// fresh partials, which the envelope rule misses.
+const FLUX_FRAME: usize = 2048;
+const FLUX_LAG: usize = 3;
+const FLUX_RANGE_DB: f32 = 50.0;
+/// A flux peak is an onset if it reaches this...
+const FLUX_MIN_DB: f32 = 4.0;
+/// ...and this much above the median flux of the last `FLUX_MEDIAN_HOPS`.
+const FLUX_MARGIN_DB: f32 = 1.5;
+const FLUX_MEDIAN_HOPS: usize = 50;
+/// Sound must be this far above the quiet floor for a flux onset...
+const FLUX_ABOVE_QUIET_DB: f32 = 10.0;
+/// ...a background that falls at once but rises this slowly, so continuous
+/// playing doesn't lift it (the onset background follows the music within
+/// seconds).
+const QUIET_RISE_SECONDS: f32 = 30.0;
 /// Live updates (tuning) come this often after the last stage...
 const LIVE_HOP_SECONDS: f32 = 0.1;
 /// ...while the in-band level stays this far above the background before
@@ -118,8 +139,14 @@ pub struct StrumListener {
     /// Recent envelope values in dB, newest last.
     envelope: Vec<f32>,
     background: Option<f32>,
+    /// Slow noise floor for flux onsets (see `QUIET_RISE_SECONDS`).
+    quiet: Option<f32>,
     /// Absolute sample index of the last raw onset, for merging.
     last_raw: Option<u64>,
+    flux: Flux,
+    /// Settled report of a strum cut short by the next one, returned by the
+    /// next `push`.
+    interrupted: Option<StrumReport>,
     current: Option<Current>,
 }
 
@@ -164,7 +191,10 @@ impl StrumListener {
             hop_count: 0,
             envelope: Vec::with_capacity(EARLIER_HOPS.1 + 1),
             background: None,
+            quiet: None,
             last_raw: None,
+            flux: Flux::new(sample_rate),
+            interrupted: None,
             current: None,
         }
     }
@@ -229,7 +259,7 @@ impl StrumListener {
                 self.on_envelope(db);
             }
             if report.is_none() {
-                report = self.due();
+                report = self.interrupted.take().or_else(|| self.due());
             }
         }
         report
@@ -343,6 +373,54 @@ impl StrumListener {
         }
     }
 
+    /// If the strum being reported on hasn't settled, analyses it now on the
+    /// audio between its window start and `until` (the next onset), if that
+    /// is at least the first stage's window, and keeps the settled report.
+    fn settle_interrupted(&mut self, until: u64) {
+        let stages = self.stages();
+        let Some(current) = &self.current else { return };
+        if current.stage >= stages.len() {
+            return;
+        }
+        let start = current.onset + self.delay as u64;
+        let available = until.saturating_sub(start) as usize;
+        let longest = *stages.last().expect("stages");
+        // A little short of the first stage still beats nothing: strumming
+        // every 0.3 s leaves ~0.17 s (chord_eval: 91% at 7/8 of 8192).
+        if available < stages[0] * 7 / 8 {
+            return;
+        }
+        let window = available.min(longest);
+        self.interrupted = Some(self.analyse(start, window, true, false));
+    }
+
+    /// Updates the spectral flux and says whether this hop ends a flux peak
+    /// that marks an onset (a hop late: the peak is known once it falls).
+    fn flux_onset(&mut self, db: f32, quiet: f32) -> bool {
+        let cap = self.history.len() as u64;
+        if self.written < FLUX_FRAME as u64 {
+            return false;
+        }
+        let start = self.written - FLUX_FRAME as u64;
+        let frame = (start..self.written).map(|i| self.history[(i % cap) as usize]);
+        let value = self.flux.push(frame);
+        let f = &self.flux;
+        let n = f.values.len();
+        if n < 3 {
+            return false;
+        }
+        // The previous hop was a local maximum above the threshold.
+        let peak = f.values[n - 2];
+        let mut recent: Vec<f32> = f.values[..n - 2].to_vec();
+        recent.sort_by(f32::total_cmp);
+        let median = recent.get(recent.len() / 2).copied().unwrap_or(0.0);
+        peak >= FLUX_MIN_DB
+            && peak >= median + FLUX_MARGIN_DB
+            && peak >= f.values[n - 3]
+            && peak > value
+            && db >= quiet + FLUX_ABOVE_QUIET_DB
+    }
+
     fn on_envelope(&mut self, db: f32) {
         let background = self.background.get_or_insert(db);
         if db < *background {
@@ -368,13 +446,32 @@ impl StrumListener {
                 && db >= background + ABOVE_BACKGROUND_DB
                 && db >= earlier_max + ABOVE_EARLIER_DB
         };
-        if onset {
+        let quiet = self.quiet.get_or_insert(db);
+        if db < *quiet {
+            *quiet = db;
+        } else {
+            *quiet += (1.0 - (-HOP_SECONDS / QUIET_RISE_SECONDS).exp()) * (db - *quiet);
+        }
+        let quiet = *quiet;
+        let flux_onset = self.flux_onset(db, quiet);
+        if onset || flux_onset {
             // The rise ended within this hop; place the onset at its start.
-            let at = self.written.saturating_sub(self.hop as u64);
+            // A flux peak is seen a hop late, about half a frame after the
+            // attack entered the frame.
+            let back = if onset {
+                self.hop
+            } else {
+                2 * self.hop + FLUX_FRAME / 2
+            };
+            let at = self.written.saturating_sub(back as u64);
             let merge = (MERGE_SECONDS * self.sample_rate) as u64;
-            let continues = self.last_raw.is_some_and(|last| at - last <= merge);
-            self.last_raw = Some(at);
+            let continues = self
+                .last_raw
+                .is_some_and(|last| at.saturating_sub(last) <= merge);
+            self.last_raw = Some(self.last_raw.map_or(at, |last| last.max(at)));
             if !continues {
+                // A strum cut short by this one settles on what it got.
+                self.settle_interrupted(at);
                 // A new strum replaces the one being reported on.
                 self.current = Some(Current {
                     onset: at,
@@ -390,6 +487,82 @@ impl StrumListener {
             self.envelope.remove(0);
         }
         self.envelope.push(db);
+    }
+}
+
+/// Spectral flux state (see `FLUX_FRAME`).
+#[derive(Debug, Clone)]
+struct Flux {
+    fft: Fft,
+    window: Vec<f32>,
+    buf: Vec<Complex32>,
+    /// Bin range 80 Hz–4 kHz.
+    bins: (usize, usize),
+    /// The last `FLUX_LAG + 1` spectra (dB over `bins`), oldest first.
+    spectra: Vec<Vec<f32>>,
+    /// Recent flux values, newest last.
+    values: Vec<f32>,
+}
+
+impl Flux {
+    fn new(sample_rate: f32) -> Self {
+        let bin_hz = sample_rate / FLUX_FRAME as f32;
+        Self {
+            fft: Fft::new(FLUX_FRAME),
+            window: (0..FLUX_FRAME)
+                .map(|i| {
+                    let t = std::f32::consts::TAU * i as f32 / FLUX_FRAME as f32;
+                    0.5 - 0.5 * t.cos()
+                })
+                .collect(),
+            buf: vec![Complex32::new(0.0, 0.0); FLUX_FRAME],
+            bins: (
+                (80.0 / bin_hz).ceil() as usize,
+                ((4000.0 / bin_hz) as usize).min(FLUX_FRAME / 2 - 1),
+            ),
+            spectra: Vec::with_capacity(FLUX_LAG + 1),
+            values: Vec::with_capacity(FLUX_MEDIAN_HOPS + 3),
+        }
+    }
+
+    /// Adds the newest frame; returns its flux (0 until enough history).
+    fn push(&mut self, frame: impl Iterator<Item = f32>) -> f32 {
+        for ((b, x), w) in self.buf.iter_mut().zip(frame).zip(&self.window) {
+            *b = Complex32::new(x * w, 0.0);
+        }
+        self.fft.forward(&mut self.buf);
+        let (lo, hi) = self.bins;
+        let mut spectrum = if self.spectra.len() > FLUX_LAG {
+            self.spectra.remove(0)
+        } else {
+            vec![0.0; hi - lo + 1]
+        };
+        for (d, c) in spectrum.iter_mut().zip(&self.buf[lo..=hi]) {
+            *d = 10.0 * (c.norm_sqr() + 1e-12).log10();
+        }
+        let value = match self.spectra.first() {
+            Some(old) if self.spectra.len() == FLUX_LAG => {
+                let top = spectrum
+                    .iter()
+                    .chain(old.iter())
+                    .copied()
+                    .fold(f32::MIN, f32::max);
+                let floor = top - FLUX_RANGE_DB;
+                spectrum
+                    .iter()
+                    .zip(old)
+                    .map(|(&new, &old)| (new.max(floor) - old.max(floor)).max(0.0))
+                    .sum::<f32>()
+                    / spectrum.len() as f32
+            }
+            _ => 0.0,
+        };
+        self.spectra.push(spectrum);
+        if self.values.len() > FLUX_MEDIAN_HOPS + 2 {
+            self.values.remove(0);
+        }
+        self.values.push(value);
+        value
     }
 }
 
@@ -643,5 +816,40 @@ mod tests {
         let chord = reports[1].chord.as_ref().expect("chord");
         assert_eq!(chord.frets, frets);
         assert!(reports[1].strings.is_empty());
+    }
+
+    #[test]
+    fn keeps_up_with_continuous_strumming() {
+        // C, Am, F, G strummed every 0.35 s, each note ringing on (the
+        // envelope barely rises between strums); every strum must settle.
+        use crate::synth::chord_strum;
+        let mut rng = Rng::new(8);
+        let chords = [[0, 0, 0, 3], [2, 0, 0, 0], [2, 0, 1, 0], [0, 2, 3, 2]];
+        let mut notes = vec![];
+        let mut truth = vec![];
+        for (k, chord) in chords.iter().cycle().take(12).enumerate() {
+            let frets: Vec<Option<u8>> = chord.iter().map(|&f| Some(f)).collect();
+            let t = 0.5 + 0.35 * k as f32;
+            let mut strum = chord_strum(Instrument::Ukulele, &frets, 3.0, &mut rng);
+            for s in &mut strum {
+                s.onset += t;
+            }
+            notes.extend(strum);
+            truth.push((t, frets));
+        }
+        let x = render(&notes, RATE, 5.5, 0.002, &mut rng);
+        let settled: Vec<StrumReport> = listen_all(Instrument::Ukulele, Analysis::Chord, &x)
+            .into_iter()
+            .filter(|r| r.settled)
+            .collect();
+        let found = truth
+            .iter()
+            .filter(|(t, _)| {
+                settled
+                    .iter()
+                    .any(|r| (r.onset_seconds as f32 - t).abs() < 0.06)
+            })
+            .count();
+        assert!(found >= 11, "{found}/12 strums settled");
     }
 }

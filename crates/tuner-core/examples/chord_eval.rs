@@ -84,6 +84,7 @@ fn main() {
             let mut rng = Rng::new(window as u64 + noise.to_bits() as u64);
             let (mut tabs, mut sets, mut total) = (0, 0, 0);
             let mut elapsed = 0.0;
+            let mut explained: Vec<f32> = vec![];
             for (name, frets) in CHORDS {
                 let frets: Vec<Option<u8>> = frets.iter().map(|&f| Some(f)).collect();
                 for _ in 0..count {
@@ -104,6 +105,9 @@ fn main() {
                     );
                     elapsed += t.elapsed().as_secs_f64();
                     total += 1;
+                    if let Some(r) = &r {
+                        explained.push(r.explained);
+                    }
                     let tab_ok = r.as_ref().is_some_and(|r| r.frets == frets);
                     tabs += tab_ok as usize;
                     let notes = |m: &[Option<i32>]| {
@@ -127,6 +131,14 @@ fn main() {
                     }
                 }
             }
+            explained.sort_by(f32::total_cmp);
+            let q = |p: f32| explained[((explained.len() - 1) as f32 * p) as usize];
+            println!(
+                "  explained min {:.2} p01 {:.2} p05 {:.2}",
+                q(0.0),
+                q(0.01),
+                q(0.05)
+            );
             println!(
                 "window {window:>5} {label:<9}: tab {:5.1}%  notes {:5.1}%  ({:.2} ms/analysis, n={total})",
                 100.0 * tabs as f64 / total as f64,

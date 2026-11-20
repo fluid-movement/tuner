@@ -37,6 +37,14 @@ const FUNDAMENTAL_RANGE_DB: f32 = 30.0;
 const PEAK_PROMINENCE_DB: f32 = 10.0;
 /// At most this many (strongest) peaks are used: one bit each.
 const MAX_PEAKS: usize = 64;
+/// A spectrum is only searched if its loudest bin stands this far above
+/// the median bin (synthetic strums >= 39 dB, noise bursts <= 12 dB).
+const MIN_CREST_DB: f32 = 25.0;
+/// A reading is only reported if its strings explain this share of the
+/// peak weight...
+const MIN_EXPLAINED: f32 = 0.75;
+/// ...and every played string explains at least this many peaks.
+const MIN_HARMONICS: u32 = 2;
 /// Penalties (in explained-weight fraction) that break ties.
 const MUTED_PENALTY: f32 = 0.02;
 const FRET_PENALTY: f32 = 0.001;
@@ -126,6 +134,19 @@ struct Peak {
     weight: f32,
 }
 
+/// Loudest bin over the median bin (dB) between 150 Hz and `MAX_PEAK_HZ`:
+/// tonal sounds have peaks far above their spectrum's general level.
+fn crest_db(spectrum: &Spectrum) -> f32 {
+    let lo = (150.0 / spectrum.bin_hz) as usize;
+    let hi = ((MAX_PEAK_HZ / spectrum.bin_hz) as usize).min(spectrum.db.len() - 1);
+    if lo >= hi {
+        return 0.0;
+    }
+    let mut band = spectrum.db[lo..=hi].to_vec();
+    band.sort_by(f32::total_cmp);
+    band[band.len() - 1] - band[band.len() / 2]
+}
+
 fn find_peaks(spectrum: &Spectrum) -> Vec<Peak> {
     let db = &spectrum.db;
     let lo = (150.0 / spectrum.bin_hz) as usize;
@@ -202,7 +223,7 @@ struct Candidate {
 }
 
 /// Recognises the chord in `frame`, an analysis window after a strum.
-/// `None` if no string's fundamental is found (silence, noise).
+/// `None` if no confident reading is found (silence, noise, speech).
 pub fn detect_chord(
     frame: &[f32],
     sample_rate: f32,
@@ -210,6 +231,10 @@ pub fn detect_chord(
     inharmonicity: f32,
 ) -> Option<ChordReading> {
     let spectrum = Spectrum::new(frame, sample_rate, 2);
+    // Not tonal (noise, knocks, speech hiss): no chord, and no search.
+    if crest_db(&spectrum) < MIN_CREST_DB {
+        return None;
+    }
     let peaks = find_peaks(&spectrum);
     if peaks.is_empty() {
         return None;
@@ -270,7 +295,8 @@ pub fn detect_chord(
 
     // Odometer over every string's candidates.
     let mut index = vec![0usize; strings.len()];
-    let mut best: Option<(f32, Vec<Option<u8>>, f32)> = None;
+    // (score, frets, share, fewest peaks explained by one played string)
+    let mut best: Option<(f32, Vec<Option<u8>>, f32, u32)> = None;
     loop {
         let chosen: Vec<Candidate> = index.iter().zip(&candidates).map(|(&i, c)| c[i]).collect();
         let fretted = chosen.iter().filter_map(|c| c.fret).filter(|&f| f > 0);
@@ -291,15 +317,32 @@ pub fn detect_chord(
                 - FRET_PENALTY * frets as f32
                 - MAX_FRET_PENALTY * f32::from(top)
                 + if common { COMMON_SHAPE_BONUS } else { 0.0 };
-            if best.as_ref().is_none_or(|(b, _, _)| score > *b) {
-                best = Some((score, chosen.iter().map(|c| c.fret).collect(), share));
+            if best.as_ref().is_none_or(|(b, ..)| score > *b) {
+                let harmonics = chosen
+                    .iter()
+                    .filter(|c| c.fret.is_some())
+                    .map(|c| c.mask.count_ones())
+                    .min()
+                    .unwrap_or(0);
+                best = Some((
+                    score,
+                    chosen.iter().map(|c| c.fret).collect(),
+                    share,
+                    harmonics,
+                ));
             }
         }
         // Next combination.
         let mut s = 0;
         loop {
             if s == index.len() {
-                let (_, frets, share) = best?;
+                let (_, frets, share, harmonics) = best?;
+                // Confidence: a strum's partials explain nearly all peaks
+                // (>= 0.84 on synthetic strums, noise bursts mostly < 0.75),
+                // and every played string shows more than its fundamental.
+                if share < MIN_EXPLAINED || harmonics < MIN_HARMONICS {
+                    return None;
+                }
                 return Some(reading(instrument, frets, share));
             }
             index[s] += 1;
