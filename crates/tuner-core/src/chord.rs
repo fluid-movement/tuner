@@ -32,6 +32,9 @@ const DYNAMIC_RANGE_DB: f32 = 60.0;
 /// A candidate's fundamental must be a peak at most this far below the
 /// strongest one (played fundamentals are strong; noise peaks are not).
 const FUNDAMENTAL_RANGE_DB: f32 = 30.0;
+/// A candidate's fundamental must also stand this far above its local
+/// background: a string, not a noise peak (strings measure 40 dB and more).
+const FUNDAMENTAL_PROMINENCE_DB: f32 = 20.0;
 /// A peak must stand this far above the median of the spectrum within a
 /// semitone around it.
 const PEAK_PROMINENCE_DB: f32 = 10.0;
@@ -40,6 +43,16 @@ const MAX_PEAKS: usize = 64;
 /// A spectrum is only searched if its loudest bin stands this far above
 /// the median bin (synthetic strums >= 39 dB, noise bursts <= 12 dB).
 const MIN_CREST_DB: f32 = 25.0;
+/// Median -6 dB width (bins of the unpadded frame) of the played strings'
+/// fundamentals above which the sound isn't steady enough to be strings.
+const MAX_PEAK_WIDTH_BINS: f32 = 5.0;
+/// Semitones above a note where its own overtones sound (unison, octave,
+/// octave + fifth, two octaves, + major third, + fifth, + minor seventh,
+/// three octaves).
+const OVERTONES: [i32; 8] = [0, 12, 19, 24, 28, 31, 34, 36];
+/// No chord if a peak below the instrument's lowest note is within this
+/// many dB of the strongest peak.
+const BELOW_RANGE_DB: f32 = 15.0;
 /// A reading is only reported if its strings explain this share of the
 /// peak weight...
 const MIN_EXPLAINED: f32 = 0.75;
@@ -136,6 +149,8 @@ pub struct ChordReading {
 struct Peak {
     hz: f32,
     weight: f32,
+    /// dB above the quieter side's median (see `find_peaks`).
+    prominence: f32,
 }
 
 /// Loudest bin over the median bin (dB) between 150 Hz and `MAX_PEAK_HZ`:
@@ -149,6 +164,25 @@ fn crest_db(spectrum: &Spectrum) -> f32 {
     let mut band = spectrum.db[lo..=hi].to_vec();
     band.sort_by(f32::total_cmp);
     band[band.len() - 1] - band[band.len() / 2]
+}
+
+/// Width at -6 dB, in bins of the unpadded frame, of the strongest bin
+/// within ±40 padded bins of `hz`.
+fn peak_width_bins(spectrum: &Spectrum, hz: f32) -> Option<f32> {
+    let db = &spectrum.db;
+    let c = (hz / spectrum.bin_hz).round() as usize;
+    let (lo, hi) = (c.saturating_sub(40), (c + 40).min(db.len() - 1));
+    let i = (lo..=hi).max_by(|&a, &b| db[a].total_cmp(&db[b]))?;
+    let level = db[i] - 6.0;
+    let (mut l, mut r) = (i, i);
+    while l > 0 && db[l] > level {
+        l -= 1;
+    }
+    while r + 1 < db.len() && db[r] > level {
+        r += 1;
+    }
+    let unpadded = spectrum.sample_rate / spectrum.frame_len as f32;
+    Some((r - l) as f32 * spectrum.bin_hz / unpadded)
 }
 
 fn find_peaks(spectrum: &Spectrum) -> Vec<Peak> {
@@ -171,7 +205,7 @@ fn find_peaks(spectrum: &Spectrum) -> Vec<Peak> {
                 && db[i] > db[i + 1]
                 && db[i] > db[i + 2]
         })
-        .filter(|&i| {
+        .filter_map(|i| {
             // Background: outside the window's main lobe, out to a semitone
             // or two lobes, whichever is wider, on either side.
             let hz = i as f32 * spectrum.bin_hz;
@@ -191,9 +225,10 @@ fn find_peaks(spectrum: &Spectrum) -> Vec<Peak> {
                 (Some(l), Some(r)) => l.min(r),
                 (l, r) => l.or(r).unwrap_or(f32::MIN),
             };
-            db[i] - background >= PEAK_PROMINENCE_DB
-        })
-        .map(|i| {
+            let prominence = db[i] - background;
+            if prominence < PEAK_PROMINENCE_DB {
+                return None;
+            }
             let (l, m, r) = (db[i - 1], db[i], db[i + 1]);
             let denom = l - 2.0 * m + r;
             let shift = if denom < 0.0 {
@@ -201,10 +236,11 @@ fn find_peaks(spectrum: &Spectrum) -> Vec<Peak> {
             } else {
                 0.0
             };
-            Peak {
+            Some(Peak {
                 hz: (i as f32 + shift) * spectrum.bin_hz,
                 weight: m - floor,
-            }
+                prominence,
+            })
         })
         .collect();
     if peaks.len() > MAX_PEAKS {
@@ -244,8 +280,32 @@ pub fn detect_chord(
         return None;
     }
     let total: f32 = peaks.iter().map(|p| p.weight).sum();
+    let top_weight = peaks.iter().map(|p| p.weight).fold(0.0, f32::max);
+    // A strong peak below the lowest note the instrument can play (voices
+    // talking or humming, 90-250 Hz) means it isn't (only) the instrument.
+    let lowest = instrument
+        .strings()
+        .iter()
+        .map(|s| s.frequency)
+        .fold(f32::MAX, f32::min)
+        * 2f32.powf(-TOLERANCE_CENTS / 1200.0);
+    let band_max = |lo: f32, hi: f32| {
+        let (lo, hi) = (
+            (lo / spectrum.bin_hz) as usize,
+            (hi / spectrum.bin_hz) as usize,
+        );
+        spectrum.db[lo..hi.min(spectrum.db.len())]
+            .iter()
+            .copied()
+            .fold(f32::MIN, f32::max)
+    };
+    // Below the lowest note's window main lobe (±4 bins of the frame).
+    let lobe_hz = 4.0 * sample_rate / frame.len() as f32;
+    if band_max(70.0, lowest - lobe_hz) >= band_max(lowest, MAX_PEAK_HZ) - BELOW_RANGE_DB {
+        return None;
+    }
     // Weights are dB above the floor, so the strongest peak's is the range.
-    let strong_weight = peaks.iter().map(|p| p.weight).fold(0.0, f32::max) - FUNDAMENTAL_RANGE_DB;
+    let strong_weight = top_weight - FUNDAMENTAL_RANGE_DB;
     let near = |hz: f32| move |p: &Peak| cents_between(p.hz, hz).abs() <= TOLERANCE_CENTS;
 
     let strings = instrument.strings();
@@ -258,10 +318,11 @@ pub fn detect_chord(
             }];
             for fret in 0..=MAX_FRET {
                 let f0 = s.frequency * 2f32.powf(f32::from(fret) / 12.0);
-                if !peaks
-                    .iter()
-                    .any(|p| near(f0)(p) && p.weight >= strong_weight)
-                {
+                if !peaks.iter().any(|p| {
+                    near(f0)(p)
+                        && p.weight >= strong_weight
+                        && p.prominence >= FUNDAMENTAL_PROMINENCE_DB
+                }) {
                     continue;
                 }
                 let mut mask = 0u64;
@@ -345,6 +406,36 @@ pub fn detect_chord(
                 // (>= 0.84 on synthetic strums, noise bursts mostly < 0.75),
                 // and every played string shows more than its fundamental.
                 if share < MIN_EXPLAINED || harmonics < MIN_HARMONICS {
+                    return None;
+                }
+                // A plucked string holds its pitch: its peak is as narrow as
+                // the window allows (~3.5 bins at -6 dB; 99% <= 4 on
+                // synthetic strums). Gliding voices and whistles smear
+                // (>= 6.5).
+                let mut widths: Vec<f32> = frets
+                    .iter()
+                    .zip(strings)
+                    .filter_map(|(f, s)| {
+                        let f0 = s.frequency * 2f32.powf(f32::from((*f)?) / 12.0);
+                        peak_width_bins(&spectrum, f0)
+                    })
+                    .collect();
+                widths.sort_by(f32::total_cmp);
+                if widths
+                    .get(widths.len() / 2)
+                    .is_some_and(|&w| w > MAX_PEAK_WIDTH_BINS)
+                {
+                    return None;
+                }
+                // One pitch and its overtones (a hummed or sung note, a
+                // single plucked string): not a chord.
+                let notes: Vec<i32> = frets
+                    .iter()
+                    .zip(strings)
+                    .filter_map(|(f, s)| f.map(|f| s.midi + i32::from(f)))
+                    .collect();
+                let low = notes.iter().copied().min().unwrap_or(0);
+                if notes.iter().all(|n| OVERTONES.contains(&(n - low))) {
                     return None;
                 }
                 return Some(reading(instrument, frets, share, &peaks, inharmonicity));
@@ -448,5 +539,41 @@ mod tests {
     fn silence_has_no_chord() {
         let frame = vec![0.0; 16_384];
         assert!(detect_chord(&frame, 48_000.0, Instrument::Ukulele, 2e-5).is_none());
+    }
+
+    /// A sung or hummed tone: `f0` with decaying harmonics, optionally
+    /// gliding to `f1`, with light vibrato.
+    fn voice(f0: f32, f1: f32, harmonics: usize) -> Vec<f32> {
+        let rate = 48_000.0;
+        let tau = std::f32::consts::TAU;
+        let mut phase = vec![0.0f32; harmonics];
+        (0..16_384)
+            .map(|k| {
+                let u = k as f32 / 16_384.0;
+                let f = (f0 + (f1 - f0) * u) * (1.0 + 0.004 * (tau * 5.5 * k as f32 / rate).sin());
+                phase
+                    .iter_mut()
+                    .enumerate()
+                    .map(|(h, ph)| {
+                        *ph = (*ph + tau * f * (h + 1) as f32 / rate) % tau;
+                        0.1 * ph.sin() / ((h + 1) * (h + 1)) as f32
+                    })
+                    .sum()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn voices_and_whistles_are_not_chords() {
+        let cases = [
+            ("hummed D4 (in range, one pitch)", voice(293.7, 293.7, 8)),
+            ("hummed G3 (below the ukulele)", voice(196.0, 196.0, 8)),
+            ("talking pitch glide", voice(140.0, 180.0, 20)),
+            ("whistle glide", voice(900.0, 1300.0, 1)),
+        ];
+        for (name, x) in cases {
+            let r = detect_chord(&x, 48_000.0, Instrument::Ukulele, 2e-5);
+            assert!(r.is_none(), "{name}: {:?}", r.map(|r| r.frets));
+        }
     }
 }

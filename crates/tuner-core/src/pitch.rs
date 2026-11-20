@@ -286,7 +286,9 @@ impl PitchDetector {
         }
         let b = sdy / sd2;
         let c = (sy - a * sd2) / count;
-        let shift = (-b / (2.0 * a)).clamp(-(half as f64), half as f64);
+        // max/min, not clamp: clamp's panic message pulls float formatting
+        // (~14 KB) into the wasm.
+        let shift = (-b / (2.0 * a)).max(-(half as f64)).min(half as f64);
         let value = c - b * b / (4.0 * a);
         (t as f32 + shift as f32, (value as f32).min(1.0))
     }

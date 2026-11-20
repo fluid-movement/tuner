@@ -28,6 +28,9 @@ const HOP_SECONDS: f32 = 0.01;
 const RISE_DB: f32 = 8.0;
 const RISE_HOPS: usize = 10;
 const ABOVE_BACKGROUND_DB: f32 = 15.0;
+/// No onset below this in-band level (dBFS): a strum near a phone or laptop
+/// microphone is around -40 to -15; faint room sounds are below.
+const MIN_ONSET_DB: f32 = -55.0;
 const ABOVE_EARLIER_DB: f32 = 3.0;
 const EARLIER_HOPS: (usize, usize) = (10, 30);
 const MERGE_SECONDS: f32 = 0.08;
@@ -116,6 +119,9 @@ struct Current {
     /// Background level at the onset (the running background rises towards
     /// a ringing strum).
     background_db: f32,
+    /// Chord analysis: the first stage's notes (bit per MIDI note), if it
+    /// found a chord; the settled chord must agree with it.
+    first_notes: Option<u128>,
 }
 
 #[derive(Debug, Clone)]
@@ -306,16 +312,39 @@ impl StrumListener {
         let current = self.current.as_mut().expect("a strum is being reported on");
         let onset_seconds = current.onset as f64 / f64::from(self.sample_rate);
         if self.analysis == Analysis::Chord {
+            let chord = detect_chord(
+                &frame,
+                self.sample_rate,
+                self.instrument,
+                self.poly.inharmonicity,
+            );
+            let notes = chord.as_ref().map(|c| {
+                c.midi
+                    .iter()
+                    .flatten()
+                    .fold(0u128, |m, &n| m | 1 << n.clamp(0, 127))
+            });
+            let chord = if current.stage <= 1 && !settled {
+                // First stage: remember what it heard.
+                current.first_notes = notes;
+                chord
+            } else if current.stage > 1 || settled && current.first_notes.is_some() {
+                // A strum keeps its notes as it rings; voices and whistles
+                // glide. The settled chord must share at least half its
+                // notes with the first stage's (which must have found one).
+                let agree = match (&current.first_notes, &notes) {
+                    (Some(first), Some(now)) => 2 * (now & first).count_ones() >= now.count_ones(),
+                    _ => false,
+                };
+                chord.filter(|_| agree)
+            } else {
+                chord
+            };
             return StrumReport {
                 onset_seconds,
                 settled,
                 strings: vec![],
-                chord: detect_chord(
-                    &frame,
-                    self.sample_rate,
-                    self.instrument,
-                    self.poly.inharmonicity,
-                ),
+                chord,
             };
         }
         let estimates = estimate_strum(&frame, self.instrument, &self.poly);
@@ -454,7 +483,7 @@ impl StrumListener {
         }
         let quiet = *quiet;
         let flux_onset = self.flux_onset(db, quiet);
-        if onset || flux_onset {
+        if (onset || flux_onset) && db >= MIN_ONSET_DB {
             // The rise ended within this hop; place the onset at its start.
             // A flux peak is seen a hop late, about half a frame after the
             // attack entered the frame.
@@ -479,6 +508,7 @@ impl StrumListener {
                     next_live: 0,
                     strings: vec![],
                     background_db: background,
+                    first_notes: None,
                 });
             }
         }

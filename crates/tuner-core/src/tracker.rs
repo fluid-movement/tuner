@@ -477,7 +477,9 @@ impl MonoTuner {
     fn cutoff_for(&self, frequency: Option<f32>, state: TrackState) -> Option<f32> {
         match (state, frequency, self.default_lowpass) {
             (TrackState::Tracking | TrackState::Holding, Some(f), Some(default)) => Some(
-                (f * TRACKING_LOWPASS_HARMONICS).clamp(MIN_TRACKING_LOWPASS.min(default), default),
+                (f * TRACKING_LOWPASS_HARMONICS)
+                    .max(MIN_TRACKING_LOWPASS.min(default))
+                    .min(default), // not clamp: see pitch.rs
             ),
             _ => self.default_lowpass,
         }

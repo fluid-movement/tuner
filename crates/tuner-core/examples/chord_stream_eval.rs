@@ -19,7 +19,15 @@ struct Outcome {
 }
 
 /// Strums `per_chord` times per chord of the progression, `gap` s apart.
-fn run(trials: usize, gap: f32, per_chord: usize, detune: f32, mute: bool, seed: u64) -> Outcome {
+fn run(
+    trials: usize,
+    gap: f32,
+    per_chord: usize,
+    detune: f32,
+    mute: bool,
+    gain: f32,
+    seed: u64,
+) -> Outcome {
     let mut rng = Rng::new(seed);
     let mut out = Outcome {
         strums: 0,
@@ -43,6 +51,7 @@ fn run(trials: usize, gap: f32, per_chord: usize, detune: f32, mute: bool, seed:
                 let mut strum = chord_strum(Instrument::Ukulele, &frets, detune, &mut rng);
                 for (i, s) in strum.iter_mut().enumerate() {
                     s.onset += t;
+                    s.level *= gain;
                     // The previous note on this string stops here.
                     for (k, (string, _)) in notes.iter().enumerate() {
                         if *string == i && stops[k] > s.onset {
@@ -172,6 +181,136 @@ fn noise_reports(seconds: f32, seed: u64) -> usize {
     chords.len()
 }
 
+/// Chords reported on `x` (settled), for sounds that aren't ukulele.
+fn chords_in(x: &[f32]) -> Vec<Vec<Option<u8>>> {
+    let mut listener = StrumListener::new(RATE, Instrument::Ukulele);
+    listener.set_analysis(Analysis::Chord);
+    x.chunks(1024)
+        .filter_map(|c| listener.push(c))
+        .filter(|r| r.settled)
+        .filter_map(|r| r.chord.map(|c| c.frets))
+        .collect()
+}
+
+/// Everyday sounds while the ukulele isn't played.
+fn everyday(kind: &str, seconds: f32, seed: u64) -> Vec<f32> {
+    let mut rng = Rng::new(seed);
+    let n = (seconds * RATE) as usize;
+    let mut x = render(&[], RATE, seconds, 0.0005, &mut rng);
+    let tau = std::f32::consts::TAU;
+    match kind {
+        // Voiced syllables: gliding f0 with harmonics shaped by two
+        // formants, separated by pauses and hiss (fricatives).
+        "talking" => {
+            let mut t = 0.3;
+            while t < seconds - 0.8 {
+                let len = rng.uniform(0.15, 0.6);
+                let f_start = rng.uniform(90.0, 260.0);
+                let f_end = f_start * rng.uniform(0.75, 1.3);
+                let (f1, f2) = (rng.uniform(300.0, 850.0), rng.uniform(900.0, 2300.0));
+                let amp = rng.uniform(0.03, 0.2);
+                let start = (t * RATE) as usize;
+                let m = (len * RATE) as usize;
+                let mut phase = [0.0f32; 30];
+                for k in 0..m.min(n - start) {
+                    let u = k as f32 / m as f32;
+                    let f0 =
+                        f_start + (f_end - f_start) * u + 3.0 * (tau * 5.5 * k as f32 / RATE).sin();
+                    let env = (u * 12.0).min(1.0) * ((1.0 - u) * 8.0).min(1.0);
+                    let mut y = 0.0;
+                    for (h, ph) in phase.iter_mut().enumerate() {
+                        let hz = f0 * (h + 1) as f32;
+                        if hz > 5000.0 {
+                            break;
+                        }
+                        *ph = (*ph + tau * hz / RATE) % tau;
+                        let formant = (-((hz - f1) / 150.0).powi(2)).exp()
+                            + 0.6 * (-((hz - f2) / 250.0).powi(2)).exp()
+                            + 0.05;
+                        y += formant * ph.sin() / (h + 1) as f32;
+                    }
+                    x[start + k] += amp * env * y;
+                }
+                t += len;
+                if rng.uniform(0.0, 1.0) < 0.4 {
+                    let s0 = (t * RATE) as usize;
+                    let hiss = (rng.uniform(0.05, 0.15) * RATE) as usize;
+                    for y in x[s0..(s0 + hiss).min(n)].iter_mut() {
+                        *y += 0.03 * rng.normal();
+                    }
+                }
+                t += rng.uniform(0.08, 0.5);
+            }
+        }
+        "whistling" => {
+            let mut t = 0.3;
+            let mut phase = 0.0f32;
+            while t < seconds - 1.0 {
+                let len = rng.uniform(0.2, 0.8);
+                let (a, b) = (rng.uniform(700.0, 1800.0), rng.uniform(700.0, 1800.0));
+                let start = (t * RATE) as usize;
+                let m = (len * RATE) as usize;
+                for k in 0..m.min(n - start) {
+                    let u = k as f32 / m as f32;
+                    phase = (phase + tau * (a + (b - a) * u) / RATE) % tau;
+                    let env = (u * 20.0).min(1.0) * ((1.0 - u) * 20.0).min(1.0);
+                    x[start + k] += 0.08 * env * phase.sin();
+                }
+                t += len + rng.uniform(0.05, 0.4);
+            }
+        }
+        // Mains hum with harmonics, a fan (steady noise), switching on and off.
+        "hum and fan" => {
+            for (i, y) in x.iter_mut().enumerate() {
+                let t = i as f32 / RATE;
+                let on = (t / 3.0) as usize % 2 == 1;
+                let hum: f32 = (1..8)
+                    .map(|h| (tau * 50.0 * h as f32 * t).sin() / h as f32)
+                    .sum();
+                *y += if on { 0.02 * hum } else { 0.004 * hum } + 0.004 * rng.normal();
+            }
+        }
+        // Quiet room: taps, clicks, a knock now and then.
+        "quiet room taps" => {
+            let mut t = 0.3;
+            while t < seconds - 0.2 {
+                let start = (t * RATE) as usize;
+                let len = (rng.uniform(0.001, 0.02) * RATE) as usize;
+                let amp = rng.uniform(0.05, 0.5);
+                let ring = rng.uniform(200.0, 3000.0);
+                for k in 0..(len * 8).min(n - start) {
+                    let env = (-(k as f32) / len as f32).exp();
+                    x[start + k] +=
+                        amp * env * (0.5 * rng.normal() + (tau * ring * k as f32 / RATE).sin());
+                }
+                t += rng.uniform(0.2, 1.5);
+            }
+        }
+        // Humming one sustained note now and then (a single pitch).
+        "humming" => {
+            let mut t = 0.3;
+            while t < seconds - 2.0 {
+                let f0 = rng.uniform(110.0, 330.0);
+                let len = rng.uniform(0.6, 1.5);
+                let start = (t * RATE) as usize;
+                let m = (len * RATE) as usize;
+                for k in 0..m.min(n - start) {
+                    let u = k as f32 / m as f32;
+                    let env = (u * 10.0).min(1.0) * ((1.0 - u) * 10.0).min(1.0);
+                    let ph = tau * f0 * k as f32 / RATE;
+                    let y: f32 = (1..10)
+                        .map(|h| (ph * h as f32).sin() / (h * h) as f32)
+                        .sum();
+                    x[start + k] += 0.1 * env * y;
+                }
+                t += len + rng.uniform(0.3, 1.0);
+            }
+        }
+        _ => unreachable!(),
+    }
+    x
+}
+
 fn main() {
     let trials: usize = std::env::args()
         .nth(1)
@@ -183,12 +322,21 @@ fn main() {
         ("strumming 0.3 s", 0.3, 4, 3.0, false),
         ("detuned ±20 c, 1 s", 1.0, 2, 20.0, false),
         ("one string muted, 1 s", 1.0, 2, 3.0, true),
+        ("quiet strums (-20 dB), 1 s", 1.0, 2, 3.0, false),
+        ("very quiet (-30 dB), 1 s", 1.0, 2, 3.0, false),
     ] {
+        let gain = if label.starts_with("quiet") {
+            0.1
+        } else if label.starts_with("very quiet") {
+            0.032
+        } else {
+            1.0
+        };
         // CASE=<text> runs only the scenarios whose label contains it.
         if std::env::var("CASE").is_ok_and(|c| !label.contains(c.as_str())) {
             continue;
         }
-        let o = run(trials, gap, per, detune, mute, 11);
+        let o = run(trials, gap, per, detune, mute, gain, 11);
         println!(
             "{label:<28} settled {:5.1}%  notes right {:5.1}% of strums  false chords {}",
             100.0 * o.settled as f64 / o.strums as f64,
@@ -200,4 +348,21 @@ fn main() {
         "noise bursts (60 s): {} chords reported",
         noise_reports(60.0, 5)
     );
+    for kind in [
+        "talking",
+        "whistling",
+        "hum and fan",
+        "quiet room taps",
+        "humming",
+    ] {
+        // Five independent minutes of each.
+        let chords: Vec<_> = (21..26)
+            .flat_map(|seed| chords_in(&everyday(kind, 60.0, seed)))
+            .collect();
+        println!(
+            "{kind} (5 min): {} chords reported {:?}",
+            chords.len(),
+            chords.iter().take(4).collect::<Vec<_>>()
+        );
+    }
 }
