@@ -1,5 +1,5 @@
-- [ ] Chrome sees a valid installable manifest (name, icons 192/512 incl. maskable, standalone, start_url) and the icons load (e2e)
-- [ ] A registered service worker controls the page; with the network offline a reload still shows the app and chord mode listens (e2e)
-- [ ] A new deploy's service worker replaces the old cache on the next launch, without a banner
-- [ ] Screen wake lock is requested while listening where supported (e2e or unit)
-- [ ] Unit, lint, build and browser tests pass; nginx serves the service worker and manifest uncached
+- [x] Chrome sees a valid installable manifest (name, icons 192/512 incl. maskable, standalone, start_url) and the icons load (e2e)
+- [x] A registered service worker controls the page; with the network offline a reload still shows the app and chord mode listens (e2e)
+- [x] A new deploy's service worker replaces the old cache on the next launch, without a banner
+- [x] Screen wake lock is requested while listening where supported (e2e or unit)
+- [x] Unit, lint, build and browser tests pass; nginx serves the service worker and manifest uncached
