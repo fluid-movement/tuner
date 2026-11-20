@@ -1,2 +1,2 @@
-- [ ] Modes Chord / Strum / String; a first visit opens in Chord (e2e)
-- [ ] A saved mode choice survives a reload (e2e)
+- [x] Modes Chord / Strum / String; a first visit opens in Chord (e2e)
+- [x] A saved mode choice survives a reload (e2e)

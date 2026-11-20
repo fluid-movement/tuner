@@ -1,4 +1,4 @@
-- [ ] No Start/Stop button; the app listens on load (e2e: pipeline.test.ts)
-- [ ] Without audio permission from a gesture, a tap-anywhere overlay starts audio and the tap still reaches the page
-- [ ] Denied microphone shows the error and a Try again button (e2e)
-- [ ] Unit, lint and browser tests pass
+- [x] No Start/Stop button; the app listens on load (e2e: pipeline.test.ts)
+- [x] Without audio permission from a gesture, a tap-anywhere overlay starts audio and the tap still reaches the page
+- [x] Denied microphone shows the error and a Try again button (e2e)
+- [x] Unit, lint and browser tests pass
