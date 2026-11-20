@@ -1,5 +1,5 @@
 ---
-title: Faster note lock in single-string mode
+title: 'Faster strum readings: staged reports and live updates'
 kind: code
 parent: 01M509SB0RMTVQ2PY4M21KKQAA
 tags:
@@ -9,12 +9,10 @@ priority: high
 
 ## Requirement
 
-A plucked string shows a reading as close to instantly as possible; today it takes about a second. On paper the path is fast (2048-sample window, 21 ms hop, lock after 2 confident frames, median of 5, 120 ms EMA: roughly 100–200 ms), so the delay comes from somewhere the numbers don't show: the attack frames failing the onset clarity/margin gates, the noise floor, the UI median/EMA, or CSS transitions. Measure first (tuner-lab "time to first reading" on synthetic and real plucks, plus an end-to-end browser timing), then cut the biggest contributors.
+The user tunes in strum mode (also for single strings), where a reading took ~0.8 s after the strum (0.12 s delay + one ~0.68 s window). Readings should appear as close to instantly as possible, may be rough at first and settle, and should keep following the string while it rings so turning a peg shows.
 
-Target: first reading within 150 ms of the pluck on the 95th percentile, with no more wrong first readings (octave errors) than today.
+Staged reports: a first reading on a short window, then longer ones; before the last stage a string that doesn't clearly sound shows no reading instead of a possibly wrong "not heard". After the last stage, tuning reports keep updating every 0.1 s on the latest window while the strum rings (level ≥ 10 dB above the pre-strum background, at most 6 s).
+
+Evidence (poly_eval / presence_eval with POLY_FRAME): ukulele pitch is exact from 4096 samples, presence reliable from 16384; guitar needs 16384 for reliable pitch and 32768 for presence. Single-string mode latency is out of scope (user doesn't use it).
 
 ## Open questions
-
-- Is a briefly rough first reading (that settles over the next ~100 ms) acceptable in exchange for speed?
-- Can the user record a few plucks per string (tuner-lab protocol) so we tune against real attacks?
-- Does "about a second" mean until the needle first appears, or until it settles?

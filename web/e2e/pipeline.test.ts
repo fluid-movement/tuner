@@ -27,3 +27,32 @@ test('shows an error when microphone access is denied @a2', async ({ page }) => 
 	await expect(page.getByRole('alert')).toHaveText('Microphone access was denied.');
 	await expect(page.getByRole('button', { name: 'Try again' })).toBeEnabled();
 });
+
+test('where audio needs a gesture, the first tap anywhere starts it @a2', async ({ page }) => {
+	// Emulate iOS Safari: the context stays suspended until a user gesture.
+	await page.addInitScript(() => {
+		const Native = window.AudioContext;
+		let gesture = false;
+		addEventListener('pointerdown', () => (gesture = true), { capture: true });
+		window.AudioContext = class extends Native {
+			get state() {
+				return gesture ? super.state : 'suspended';
+			}
+			resume() {
+				if (!gesture) return new Promise<void>(() => {});
+				return super.resume().then(() => {
+					this.dispatchEvent(new Event('statechange'));
+				});
+			}
+		};
+	});
+	await page.goto('/');
+	const wake = page.getByTestId('wake');
+	await expect(wake).toHaveText('Tap anywhere to start listening', { timeout: 10_000 });
+	await expect(page.getByTestId('level')).toHaveCount(0);
+	// The tap also reaches what it lands on.
+	await page.getByRole('radio', { name: 'String', exact: true }).click({ force: true });
+	await expect(wake).toHaveCount(0);
+	await expect(page.getByRole('radio', { name: 'String', exact: true })).toBeChecked();
+	await expect(page.getByTestId('note')).toHaveText('A2', { timeout: 10_000 });
+});

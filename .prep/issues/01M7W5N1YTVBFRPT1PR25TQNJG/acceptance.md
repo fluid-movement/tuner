@@ -1,0 +1,5 @@
+- [ ] Chord mode names a strummed ukulele chord and shows its diagram and tab (e2e: C and G7)
+- [ ] chord_eval on 30 common chords: name right >= 97% at 16384 samples in clean, noisy and phone-mic conditions
+- [ ] Settled chords collect in a history (structured ChordResult values)
+- [ ] tuner.wasm stays within 160 KB raw / 60 KB gzipped
+- [ ] Unit, lint and browser tests pass

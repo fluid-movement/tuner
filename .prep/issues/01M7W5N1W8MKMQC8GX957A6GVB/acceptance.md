@@ -1,0 +1,4 @@
+- [ ] First strum report: ukulele within 0.25 s of the strum, guitar within 0.33 s (strum.rs test)
+- [ ] Early reports never mark a played string not heard; their readings are within 3 cents (strum.rs test)
+- [ ] Live updates follow a pitch change while the string rings (strum.rs test)
+- [ ] Settled verdicts unchanged: existing strum unit and browser tests pass

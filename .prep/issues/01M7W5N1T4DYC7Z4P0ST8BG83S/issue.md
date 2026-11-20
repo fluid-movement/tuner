@@ -9,8 +9,6 @@ priority: high
 
 ## Requirement
 
-The app starts listening as soon as it loads; the Start button goes away. First visit shows the browser's microphone prompt straight away. Where the browser refuses to start audio without a gesture (AudioContext stays suspended, mainly iOS Safari), the app shows a full-screen "tap to start" hint that starts on the first tap anywhere, instead of a button. Denied permission and missing microphone keep their current error messages.
+The app starts listening as soon as it loads; the Start (and Stop) button goes away. First visit shows the browser's microphone prompt straight away. Where the browser refuses to start audio without a gesture (AudioContext stays suspended, mainly iOS Safari), the app shows a "Tap anywhere to start listening" overlay; the first tap anywhere starts audio and still acts on what was tapped. Denied permission and missing microphone keep their error messages, with a "Try again" button.
 
 ## Open questions
-
-- Is the "tap anywhere" fallback acceptable where the browser demands a gesture, or should those browsers keep an explicit button?

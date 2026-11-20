@@ -1,0 +1,1 @@
+Code: `crates/tuner-core/src/strum.rs` (`stages()`, `StrumListener::due`, live merge in `analyse`; `StrumReport::settled`), `crates/tuner-wasm/src/lib.rs` (`strum_settled`), `web/src/lib/wasm/tuner.ts`. Evals: `crates/tuner-core/examples/poly_eval.rs` and `presence_eval.rs` take `POLY_FRAME`. See [Polyphonic research findings](/findings/01M4ZPXYG9M0NFAVZ9BSKV7548.md).

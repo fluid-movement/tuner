@@ -1,5 +1,5 @@
 ---
-title: 'Mode switch: String / Strum / Chord, Chord default'
+title: 'Mode switch: Chord / Strum / String, Chord default'
 kind: code
 parent: 01M509SB0RMTVQ2PY4M21KKQAA
 tags:
@@ -8,9 +8,6 @@ tags:
 
 ## Requirement
 
-The mode switch offers the chord mode next to the existing modes, and a first visit opens in the new default mode. A saved mode choice still wins.
+The mode switch offers Chord, Strum (the strum tuning check) and String (single-string tuner, kept because it shares the core). A first visit opens in Chord; a saved mode choice still wins. Chord mode hides the instrument switch (ukulele only).
 
 ## Open questions
-
-- "Strum" today is the strum tuning check (strum open strings, see which are out of tune). Is the default you want the new chord mode, and do we keep the strum tuning check as a third mode, or drop it?
-- Mode names: String / Strum / Chord? Or Tune / Chord with strum check folded into tune?

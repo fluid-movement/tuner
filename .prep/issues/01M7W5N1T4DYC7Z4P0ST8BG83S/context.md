@@ -1,0 +1,1 @@
+Code: `web/src/lib/audio/tuner-engine.ts` (`startTuner` no longer awaits `context.resume()`; exposes `running`, `resume()`, `onRunningChange`), `web/src/routes/+page.svelte` (starts on mount; `.wake` overlay with `pointer-events: none` plus a window `pointerdown` that resumes). E2E helper `web/e2e/open.ts`.
