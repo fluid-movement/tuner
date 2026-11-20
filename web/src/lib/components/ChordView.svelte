@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { StrumReport, TunerString } from '#lib/wasm/tuner.ts';
+	import { describeOff, offStrings } from '#lib/tuner/intonation.ts';
 
 	interface Props {
 		/** Ukulele strings in string order (G C E A). */
@@ -10,12 +11,23 @@
 		history: string[];
 		/** Whether audio is flowing. */
 		listening: boolean;
+		/** Switches to the strum tuning check. */
+		onTune?: () => void;
 	}
-	let { strings, report, history, listening }: Props = $props();
+	let { strings, report, history, listening, onTune }: Props = $props();
 
 	const FRETS_SHOWN = 4;
 	let chord = $derived(report?.chord ?? null);
 	let analysis = $derived(chord?.analysis ?? null);
+	/** Strings clearly out of tune, from a settled chord. */
+	let off = $derived(
+		report?.settled && chord
+			? offStrings(
+					strings.map((s) => s.name),
+					chord.cents
+				)
+			: []
+	);
 	/** Sounding note and role per string (null = muted / no chord). */
 	let perString = $derived.by(() => {
 		const tones = analysis?.tones ?? [];
@@ -133,6 +145,13 @@
 		<p class="keys" data-testid="chord-keys">Outside any single major key</p>
 	{/if}
 
+	{#if off.length}
+		<p class="tune" data-testid="chord-intonation">
+			Out of tune: {describeOff(off)}
+			{#if onTune}<button type="button" onclick={onTune}>Tune</button>{/if}
+		</p>
+	{/if}
+
 	{#if history.length}
 		<ol class="history" aria-label="Recent chords" data-testid="chord-history">
 			{#each history as name, i (i)}
@@ -243,6 +262,29 @@
 			Menlo,
 			monospace;
 		text-align: left;
+	}
+	.tune {
+		margin: 0;
+		padding: 8px 12px;
+		border-radius: 10px;
+		background: color-mix(in srgb, var(--off) 14%, transparent);
+		color: var(--text);
+		font-size: 0.9rem;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		flex-wrap: wrap;
+		gap: 8px;
+	}
+	.tune button {
+		border: 0;
+		border-radius: 999px;
+		padding: 4px 12px;
+		background: var(--off);
+		color: #fff;
+		font: inherit;
+		font-weight: 600;
+		cursor: pointer;
 	}
 	.history {
 		list-style: none;

@@ -127,6 +127,10 @@ pub struct ChordReading {
     pub midi: Vec<Option<i32>>,
     /// Share of the spectrum's peak weight the tab explains (0..1).
     pub explained: f32,
+    /// Per string: offset in cents of the sounding note from the fretted
+    /// pitch in standard tuning (median over its first partials that no
+    /// other string shares); `None` if muted or every partial is shared.
+    pub cents: Vec<Option<f32>>,
 }
 
 struct Peak {
@@ -343,7 +347,7 @@ pub fn detect_chord(
                 if share < MIN_EXPLAINED || harmonics < MIN_HARMONICS {
                     return None;
                 }
-                return Some(reading(instrument, frets, share));
+                return Some(reading(instrument, frets, share, &peaks, inharmonicity));
             }
             index[s] += 1;
             if index[s] < candidates[s].len() {
@@ -355,16 +359,64 @@ pub fn detect_chord(
     }
 }
 
-fn reading(instrument: Instrument, frets: Vec<Option<u8>>, explained: f32) -> ChordReading {
+/// Partials used for a string's intonation.
+const CENTS_PARTIALS: u32 = 4;
+
+fn reading(
+    instrument: Instrument,
+    frets: Vec<Option<u8>>,
+    explained: f32,
+    peaks: &[Peak],
+    inharmonicity: f32,
+) -> ChordReading {
+    let strings = instrument.strings();
     let midi: Vec<Option<i32>> = frets
         .iter()
-        .zip(instrument.strings())
+        .zip(strings)
         .map(|(f, s)| f.map(|f| s.midi + i32::from(f)))
+        .collect();
+    let f0: Vec<Option<f32>> = frets
+        .iter()
+        .zip(strings)
+        .map(|(f, s)| f.map(|f| s.frequency * 2f32.powf(f32::from(f) / 12.0)))
+        .collect();
+    let partial = |f: f32, n: u32| {
+        let n = n as f32;
+        n * f * (1.0 + inharmonicity * n * n).sqrt()
+    };
+    let cents = f0
+        .iter()
+        .enumerate()
+        .map(|(i, f)| {
+            let f = (*f)?;
+            let mut offsets: Vec<f32> = (1..=CENTS_PARTIALS)
+                .map(|n| partial(f, n))
+                // Skip partials another sounding string also produces.
+                .filter(|&hz| {
+                    !f0.iter().enumerate().any(|(j, g)| {
+                        j != i
+                            && g.is_some_and(|g| {
+                                (1..=8).any(|m| cents_between(partial(g, m), hz).abs() < 60.0)
+                            })
+                    })
+                })
+                .filter_map(|hz| {
+                    peaks
+                        .iter()
+                        .map(|p| cents_between(p.hz, hz))
+                        .filter(|c| c.abs() <= TOLERANCE_CENTS)
+                        .min_by(|a, b| a.abs().total_cmp(&b.abs()))
+                })
+                .collect();
+            offsets.sort_by(f32::total_cmp);
+            offsets.get(offsets.len() / 2).copied()
+        })
         .collect();
     ChordReading {
         frets,
         midi,
         explained,
+        cents,
     }
 }
 

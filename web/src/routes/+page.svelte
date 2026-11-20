@@ -203,6 +203,10 @@
 				report={strum?.report ?? null}
 				history={chords.map((c) => c.analysis?.symbol ?? '?')}
 				listening={running}
+				onTune={() => {
+					instrument = 'ukulele';
+					mode = 'strum';
+				}}
 			/>
 		{:else if mode === 'strum'}
 			<StrumView

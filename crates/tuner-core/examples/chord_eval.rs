@@ -85,6 +85,8 @@ fn main() {
             let (mut tabs, mut sets, mut total) = (0, 0, 0);
             let mut elapsed = 0.0;
             let mut explained: Vec<f32> = vec![];
+            let mut cents_err: Vec<f32> = vec![];
+            let mut cents_total = 0usize;
             for (name, frets) in CHORDS {
                 let frets: Vec<Option<u8>> = frets.iter().map(|&f| Some(f)).collect();
                 for _ in 0..count {
@@ -107,6 +109,21 @@ fn main() {
                     total += 1;
                     if let Some(r) = &r {
                         explained.push(r.explained);
+                        if r.frets == frets {
+                            for ((c, s), (f, t)) in r
+                                .cents
+                                .iter()
+                                .zip(&strum)
+                                .zip(frets.iter().zip(Instrument::Ukulele.strings()))
+                            {
+                                let target = t.frequency * 2f32.powf(f32::from(f.unwrap()) / 12.0);
+                                let truth = tuner_core::tuning::cents_between(s.frequency, target);
+                                cents_total += 1;
+                                if let Some(c) = c {
+                                    cents_err.push((c - truth).abs());
+                                }
+                            }
+                        }
                     }
                     let tab_ok = r.as_ref().is_some_and(|r| r.frets == frets);
                     tabs += tab_ok as usize;
@@ -138,6 +155,15 @@ fn main() {
                 q(0.0),
                 q(0.01),
                 q(0.05)
+            );
+            cents_err.sort_by(f32::total_cmp);
+            let c = |p: f32| cents_err[((cents_err.len() - 1) as f32 * p) as usize];
+            println!(
+                "  string cents: {:.0}% of strings measured, |error| p50 {:.1} p90 {:.1} p99 {:.1}",
+                100.0 * cents_err.len() as f64 / cents_total as f64,
+                c(0.5),
+                c(0.9),
+                c(0.99)
             );
             println!(
                 "window {window:>5} {label:<9}: tab {:5.1}%  notes {:5.1}%  ({:.2} ms/analysis, n={total})",

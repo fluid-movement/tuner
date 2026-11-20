@@ -37,6 +37,7 @@ export interface TunerExports {
 	strum_settled(handle: number): number;
 	strum_has_chord(handle: number): number;
 	strum_chord_fret(handle: number, index: number): number;
+	strum_chord_cents(handle: number, index: number): number;
 }
 
 /** Path of the module under static/, built by `pnpm build:wasm`. */
@@ -195,6 +196,12 @@ export interface ChordResult {
 	frets: (number | null)[];
 	/** Sounding MIDI note per string; null = muted. */
 	midi: (number | null)[];
+	/**
+	 * Per string: offset in cents from the fretted pitch in standard tuning;
+	 * null if muted or not measurable (every partial shared with another
+	 * string).
+	 */
+	cents: (number | null)[];
 	/** Name, roles, alternatives and keys; null if no string sounded. */
 	analysis: ChordAnalysis | null;
 }
@@ -265,9 +272,14 @@ export class WasmStrumListener {
 			const midi = frets.map((f, i) =>
 				f === null ? null : e.tuner_string_midi(this.#instrumentId, i) + f
 			);
+			const cents = frets.map((_, i) => {
+				const c = e.strum_chord_cents(h, i);
+				return Number.isNaN(c) ? null : c;
+			});
 			chord = {
 				frets,
 				midi,
+				cents,
 				analysis: analyseChord(midi.filter((m): m is number => m !== null))
 			};
 		}

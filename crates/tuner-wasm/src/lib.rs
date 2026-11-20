@@ -408,6 +408,19 @@ pub unsafe extern "C" fn strum_chord_fret(strum: *const Strum, index: u32) -> i3
     }
 }
 
+/// Offset in cents of string `index` in the last chord from its fretted
+/// pitch in standard tuning; NaN if muted, not measurable or no chord.
+///
+/// # Safety
+///
+/// `strum` must be a live handle from [`strum_new`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn strum_chord_cents(strum: *const Strum, index: u32) -> f32 {
+    strum_chord(unsafe { &*strum })
+        .and_then(|c| c.cents.get(index as usize).copied().flatten())
+        .unwrap_or(f32::NAN)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -545,6 +558,9 @@ mod tests {
                 assert_eq!(strum_chord_fret(s, i), 0);
             }
             assert_eq!(strum_chord_fret(s, 4), -2);
+            // In tune (the synthetic strum isn't detuned).
+            assert!((0..4).any(|i| strum_chord_cents(s, i).abs() < 1.0));
+            assert!(strum_chord_cents(s, 4).is_nan());
             strum_free(s);
         }
     }

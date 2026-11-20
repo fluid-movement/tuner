@@ -43,8 +43,13 @@ const UKULELE = [391.99544, 261.62557, 329.62756, 440];
 export const CHORDS = {
 	'chord-uke-c': { name: 'C', frets: [0, 0, 0, 3] },
 	'chord-uke-g7': { name: 'G7', frets: [0, 2, 1, 2] },
-	'chord-uke-fadd9': { name: 'Fadd9', frets: [0, 0, 1, 0] }
+	'chord-uke-fadd9': { name: 'Fadd9', frets: [0, 0, 1, 0] },
+	/** C with the C string 22 cents flat (see DETUNE). */
+	'chord-uke-c-flat': { name: 'C', frets: [0, 0, 0, 3] }
 } as const;
+
+/** Per-string detuning (cents) of some chord takes. */
+const DETUNE: Record<string, number[]> = { 'chord-uke-c-flat': [0, -22, 0, 0] };
 
 function fakeMic(name: string, write: (path: string) => void) {
 	const wav = fileURLToPath(new URL(`./test-results/fake-mic-${name}.wav`, import.meta.url));
@@ -94,7 +99,7 @@ export default defineConfig({
 			fakeMic(name, (wav) =>
 				writeStrumWav(
 					wav,
-					chord.frets.map((f, i) => cents(UKULELE[i], 100 * f))
+					chord.frets.map((f, i) => cents(UKULELE[i], 100 * f + (DETUNE[name]?.[i] ?? 0)))
 				)
 			)
 		)
