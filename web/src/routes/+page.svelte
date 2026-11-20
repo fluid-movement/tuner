@@ -10,7 +10,6 @@
 		INSTRUMENTS,
 		Tunings,
 		instantiateTuner,
-		type ChordResult,
 		type Instrument,
 		type StrumReport,
 		type TrackReading
@@ -21,7 +20,7 @@
 	import StringRow from '#lib/components/StringRow.svelte';
 	import Segmented from '#lib/components/Segmented.svelte';
 	import StrumView from '#lib/components/StrumView.svelte';
-	import ChordView from '#lib/components/ChordView.svelte';
+	import ChordView, { type HistoryEntry } from '#lib/components/ChordView.svelte';
 	import LevelMeter from '#lib/components/LevelMeter.svelte';
 	import { keepScreenOn } from '#lib/wake-lock.ts';
 
@@ -45,8 +44,8 @@
 	let mode = $state<Mode>('chord');
 	/** Last strum report (kept until the next strum) and when its strum began. */
 	let strum = $state<{ report: StrumReport; at: number } | null>(null);
-	/** Settled chords, oldest first. */
-	let chords = $state<ChordResult[]>([]);
+	/** Settled chords, oldest first; repeats of the same chord collapse. */
+	let chords = $state<HistoryEntry[]>([]);
 	/** Whether audio is flowing; false while the browser waits for a gesture. */
 	let running = $state(false);
 	let now = $state(0);
@@ -119,9 +118,14 @@
 		// Early and live reports refine the same strum: keep its start time.
 		const same = strum?.report.onsetSeconds === report.onsetSeconds;
 		strum = { report, at: same && strum ? strum.at : performance.now() };
-		if (report.chord && report.settled && recordedOnset !== report.onsetSeconds) {
+		const analysis = report.chord?.analysis;
+		if (analysis && report.settled && recordedOnset !== report.onsetSeconds) {
 			recordedOnset = report.onsetSeconds;
-			chords = [...chords, report.chord].slice(-HISTORY);
+			const last = chords.at(-1);
+			chords =
+				last?.analysis.symbol === analysis.symbol
+					? [...chords.slice(0, -1), { analysis, count: last.count + 1 }]
+					: [...chords, { analysis, count: 1 }].slice(-HISTORY);
 		}
 	}
 
@@ -201,7 +205,7 @@
 			<ChordView
 				strings={ukulele}
 				report={strum?.report ?? null}
-				history={chords.map((c) => c.analysis?.symbol ?? '?')}
+				history={chords}
 				listening={running}
 				onTune={() => {
 					instrument = 'ukulele';

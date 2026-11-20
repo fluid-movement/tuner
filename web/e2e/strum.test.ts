@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { CHORDS, STRUMS } from '../playwright.config.ts';
+import { CHORDS, PROGRESSION, STRUMS } from '../playwright.config.ts';
 import { open } from './open.ts';
 
 /** Expected verdict for a string offset (null: muted). */
@@ -32,11 +32,10 @@ for (const [name, strum] of Object.entries(STRUMS)) {
 			page
 				.locator('[data-testid^="strum-"][data-verdict]')
 				.evaluateAll((rows) => rows.map((r) => r.getAttribute('data-verdict')));
-		// Settled by now (early reports may still show strings as pending).
-		await expect(page.getByTestId('strum-status')).toContainText('Last strum 1 s ago');
-		const held = await verdicts();
+		// Two seconds on, the settled verdicts are still on screen (early
+		// reports may differ; guitar settles 0.8 s after the strum).
 		await expect(page.getByTestId('strum-status')).toContainText('Last strum 2 s ago');
-		expect(await verdicts()).toEqual(held);
+		expect(await verdicts()).toEqual(strum.cents.map(expected));
 		// The looping microphone strums again every three seconds.
 		await expect(page.getByTestId('strum-status')).toContainText('Last strum just now');
 	});
@@ -61,11 +60,12 @@ for (const [name, chord] of Object.entries(CHORDS).filter(([n]) => n !== 'chord-
 			.reverse()
 			.join('\n');
 		await expect(page.getByTestId('chord-tab')).toHaveText(tab);
-		// The looping microphone strums again every three seconds.
-		await expect(page.getByTestId('chord-history').locator('li')).toHaveCount(2, {
+		// The looping microphone strums the same chord again every three
+		// seconds: repeats collapse into one history entry with a count.
+		await expect(page.getByTestId('chord-history').locator('li')).toHaveCount(1);
+		await expect(page.getByTestId('chord-history')).toContainText(`${chord.name}×2`, {
 			timeout: 10_000
 		});
-		await expect(page.getByTestId('chord-history')).toContainText(chord.name);
 	});
 }
 
@@ -88,4 +88,21 @@ test('chord mode points out a detuned string @chord-uke-c-flat', async ({ page }
 	await page.getByTestId('chord-intonation').getByRole('button', { name: 'Tune' }).click();
 	await expect(page.getByRole('radio', { name: 'Strum', exact: true })).toBeChecked();
 	await expect(page.getByTestId('strum-C4')).toBeVisible();
+});
+
+test('chord mode finds the key and suggests next chords @chord-uke-progression', async ({
+	page
+}) => {
+	await open(page, 'Chord');
+	const history = page.getByTestId('chord-history').locator('li');
+	// C Am F G: one full round, then the key and numerals show.
+	await expect(history).toHaveCount(4, { timeout: 20_000 });
+	await expect(page.getByTestId('chord-key')).toContainText('C major');
+	const entries = (await history.allTextContents()).map((t) => t.replace(/\s+/g, ' ').trim());
+	expect(entries).toEqual(expect.arrayContaining(['C I', 'Am vi', 'F IV', 'G V']));
+	// After G (V) the next ideas start with C (I), with a ukulele shape.
+	await expect(page.getByTestId('chord-next').locator('li').first()).toHaveText(/C\s*I\s*0003/, {
+		timeout: 5_000
+	});
+	expect(PROGRESSION.frets).toHaveLength(4);
 });

@@ -4,7 +4,7 @@ Browser tuner for acoustic guitar and ukulele. Pitch analysis runs in a Rust cor
 
 The app listens as soon as it opens (browsers that need a gesture first show "Tap anywhere to start listening"). Three modes:
 
-- **Chord** (default, ukulele only): strum a chord; shows its name, a chord diagram and a tab, plus the last few chords.
+- **Chord** (default, ukulele only): strum a chord; shows its name (any combination of notes, with alternative readings), what it is, each string's note and role, a diagram and a tab. Keeps up with strumming patterns and ignores non-musical noise. The recent chords give the key, their Roman numerals and ideas for the next chord (with shapes); strings clearly out of tune are pointed out.
 - **Strum**: strum all strings (or pluck one) to see each string's offset; the first reading comes ~0.2 s after the strum (ukulele; ~0.3 s on guitar), refines as more audio arrives, and keeps updating while the strings ring.
 - **String**: classic single-string tuner.
 

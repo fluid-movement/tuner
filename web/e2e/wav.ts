@@ -101,6 +101,40 @@ export function writeStrumWav(
 	writeSamples(path, samples, rate);
 }
 
+/**
+ * A chord progression: strum `strums[k]` (frequencies per string, null =
+ * muted) at k·`period` seconds; each strum's notes stop at the next strum
+ * (re-plucked strings), and the file loops.
+ */
+export function writeProgressionWav(
+	path: string,
+	strums: (number | null)[][],
+	{ period = 1.5, level = 0.05, decay = 1.2, rate = 48_000 } = {}
+) {
+	const step = Math.round(period * rate);
+	const samples = new Float32Array(step * strums.length);
+	strums.forEach((frequencies, s) => {
+		const begin = s * step;
+		frequencies.forEach((frequency, k) => {
+			if (frequency === null) return;
+			const start = begin + Math.round((0.01 + 0.015 * k) * rate);
+			const end = begin + step;
+			const tauString = decay * (110 / frequency) ** 0.4;
+			for (let h = 1; h <= 10; h++) {
+				const amp = level / h ** 0.9;
+				const tau = tauString / (1 + 0.35 * (h - 1));
+				for (let i = start; i < end; i++) {
+					const t = (i - start) / rate;
+					// 10 ms fade before the next strum re-plucks the string.
+					const fade = Math.min(1, (end - i) / (0.01 * rate));
+					samples[i] += fade * amp * Math.exp(-t / tau) * Math.sin(2 * Math.PI * frequency * h * t);
+				}
+			}
+		});
+	});
+	writeSamples(path, samples, rate);
+}
+
 function writeSamples(path: string, samples: Float32Array, rate: number) {
 	const data = Buffer.alloc(samples.length * 2);
 	samples.forEach((v, i) =>

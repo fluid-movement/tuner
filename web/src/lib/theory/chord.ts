@@ -68,6 +68,10 @@ export interface ChordAnalysis {
 	tones: ChordTone[];
 	/** Major keys containing every note, most natural function first. */
 	keys: KeyFit[];
+	/** Triad quality, for Roman numerals in any key. */
+	triad: 'major' | 'minor' | 'diminished' | 'augmented' | 'other';
+	/** Symbol after the root and minor "m", e.g. "7", "add9", "m7b5". */
+	numeralSuffix: string;
 }
 
 interface Reading {
@@ -410,6 +414,27 @@ export function analyseChord(midi: number[]): ChordAnalysis | null {
 		description,
 		alternatives: pcs.size === 1 ? [] : alternatives,
 		tones,
-		keys: keysFor(pcs, best)
+		keys: keysFor(pcs, best),
+		triad: best.triad,
+		numeralSuffix: pcs.size === 1 ? '' : best.numeralSuffix
 	};
+}
+
+/** Degree names by semitones above the tonic. */
+const DEGREES = ['I', 'bII', 'II', 'bIII', 'III', 'IV', '#IV', 'V', 'bVI', 'VI', 'bVII', 'VII'];
+
+/**
+ * Roman numeral of a chord in the key with tonic `tonic` (any key, borrowed
+ * chords included: bVII, bVI …). Lower case for minor and diminished.
+ */
+export function romanNumeral(
+	tonic: number,
+	chord: Pick<ChordAnalysis, 'root' | 'triad' | 'numeralSuffix'>
+): string {
+	let n = DEGREES[(chord.root - tonic + 12) % 12];
+	let suffix = chord.numeralSuffix;
+	if (chord.triad === 'minor' || chord.triad === 'diminished') n = n.toLowerCase();
+	if (chord.triad === 'diminished') suffix = suffix.replace(/^m7b5/, 'ø7').replace(/^dim/, '°');
+	else if (chord.triad === 'augmented') suffix = suffix.replace(/^aug/, '+');
+	return n + suffix;
 }

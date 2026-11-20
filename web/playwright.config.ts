@@ -1,6 +1,6 @@
 import { defineConfig } from '@playwright/test';
 import { fileURLToPath } from 'node:url';
-import { writePluckWav, writeStrumWav, writeToneWav } from './e2e/wav.ts';
+import { writePluckWav, writeProgressionWav, writeStrumWav, writeToneWav } from './e2e/wav.ts';
 
 /**
  * Tones played by Chrome's fake microphone. Chrome takes the file at launch,
@@ -50,6 +50,12 @@ export const CHORDS = {
 
 /** Per-string detuning (cents) of some chord takes. */
 const DETUNE: Record<string, number[]> = { 'chord-uke-c-flat': [0, -22, 0, 0] };
+
+/** C Am F G, one strum each 1.5 s, looping. */
+export const PROGRESSION = {
+	name: 'chord-uke-progression',
+	frets: ['0003', '2000', '2010', '0232']
+};
 
 function fakeMic(name: string, write: (path: string) => void) {
 	const wav = fileURLToPath(new URL(`./test-results/fake-mic-${name}.wav`, import.meta.url));
@@ -101,6 +107,12 @@ export default defineConfig({
 					wav,
 					chord.frets.map((f, i) => cents(UKULELE[i], 100 * f + (DETUNE[name]?.[i] ?? 0)))
 				)
+			)
+		),
+		fakeMic(PROGRESSION.name, (wav) =>
+			writeProgressionWav(
+				wav,
+				PROGRESSION.frets.map((f) => [...f].map((x, i) => cents(UKULELE[i], 100 * Number(x))))
 			)
 		)
 	]

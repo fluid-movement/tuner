@@ -1,4 +1,15 @@
+<script lang="ts" module>
+	import type { ChordAnalysis } from '#lib/theory/chord.ts';
+
+	/** A chord in the history; consecutive repeats are counted. */
+	export interface HistoryEntry {
+		analysis: ChordAnalysis;
+		count: number;
+	}
+</script>
+
 <script lang="ts">
+	import { detectKey, numeralIn, suggestNext } from '#lib/theory/key.ts';
 	import type { StrumReport, TunerString } from '#lib/wasm/tuner.ts';
 	import { describeOff, offStrings } from '#lib/tuner/intonation.ts';
 
@@ -8,7 +19,7 @@
 		/** Latest chord report (early or settled), or null before a strum. */
 		report: StrumReport | null;
 		/** Settled chords, oldest first. */
-		history: string[];
+		history: HistoryEntry[];
 		/** Whether audio is flowing. */
 		listening: boolean;
 		/** Switches to the strum tuning check. */
@@ -19,6 +30,9 @@
 	const FRETS_SHOWN = 4;
 	let chord = $derived(report?.chord ?? null);
 	let analysis = $derived(chord?.analysis ?? null);
+	/** The key of the recent chords and what could come next. */
+	let key = $derived(detectKey(history.map((h) => h.analysis)));
+	let next = $derived(key && history.length ? suggestNext(key, history.at(-1)!.analysis) : []);
 	/** Strings clearly out of tune, from a settled chord. */
 	let off = $derived(
 		report?.settled && chord
@@ -134,7 +148,22 @@
 		<pre class="tab" data-testid="chord-tab">{tab.join('\n')}</pre>
 	</div>
 
-	{#if analysis?.keys.length}
+	{#if key}
+		<p class="keys" data-testid="chord-key">
+			Key: <strong>{key.name}</strong>
+			<span class="sure">{key.confidence >= 0.3 ? 'likely' : 'maybe'}</span>
+		</p>
+		{#if next.length}
+			<ol class="next" aria-label="Next chord ideas" data-testid="chord-next">
+				{#each next as s (s.symbol)}
+					<li>
+						<strong>{s.symbol}</strong> <span class="numeral">{s.numeral}</span>
+						{#if s.frets}<span class="frets">{s.frets.join('')}</span>{/if}
+					</li>
+				{/each}
+			</ol>
+		{/if}
+	{:else if analysis?.keys.length}
 		<p class="keys" data-testid="chord-keys">
 			In {analysis.keys
 				.slice(0, 3)
@@ -154,8 +183,11 @@
 
 	{#if history.length}
 		<ol class="history" aria-label="Recent chords" data-testid="chord-history">
-			{#each history as name, i (i)}
-				<li>{name}</li>
+			{#each history as h, i (i)}
+				<li>
+					{h.analysis.symbol}{#if h.count > 1}<span class="count">×{h.count}</span>{/if}
+					{#if key}<span class="numeral">{numeralIn(key, h.analysis)}</span>{/if}
+				</li>
 			{/each}
 		</ol>
 	{/if}
@@ -285,6 +317,41 @@
 		font: inherit;
 		font-weight: 600;
 		cursor: pointer;
+	}
+	.sure {
+		font-size: 0.8rem;
+		opacity: 0.8;
+	}
+	.next {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: center;
+		gap: 8px;
+	}
+	.next li {
+		padding: 4px 10px;
+		border: 1px solid var(--line);
+		border-radius: 10px;
+		font-size: 0.9rem;
+	}
+	.numeral {
+		margin-left: 4px;
+		font-size: 0.8em;
+		opacity: 0.75;
+	}
+	.frets {
+		margin-left: 6px;
+		font:
+			0.85em ui-monospace,
+			monospace;
+		color: var(--muted);
+	}
+	.count {
+		margin-left: 2px;
+		font-size: 0.8em;
 	}
 	.history {
 		list-style: none;
