@@ -1,0 +1,1 @@
+- 2026-11-20T21:05:36Z claude-code: Check pass: wasm 161.2 KB -> 135.5 KB (51 KB gz); perf example: single-note tracker 35-37 ms per audio second natively, now skipped in Chord/Strum; CDP main thread tasks Chord 30.3 -> 26.6 ms/s, Strum 29.5 -> 25.1 ms/s; listening 167-227 ms; cargo test incl. level_only_mode_skips_pitch, vitest 75, Playwright 22.

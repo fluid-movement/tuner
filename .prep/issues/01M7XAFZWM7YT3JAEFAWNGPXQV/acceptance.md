@@ -1,0 +1,3 @@
+- [x] Measured before/after: wasm size, audio-thread analysis per second, main-thread task time per second, time to listening
+- [x] Pitch detection off outside String mode, with a wasm test (level still measured, tracking resumes)
+- [x] Behaviour unchanged: unit, lint and browser tests pass
