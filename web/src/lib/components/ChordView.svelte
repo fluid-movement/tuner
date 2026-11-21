@@ -18,6 +18,8 @@
 		strings: TunerString[];
 		/** Latest chord report (early or settled), or null before a strum. */
 		report: StrumReport | null;
+		/** The report whose chord is on display (kept until the next chord). */
+		shown: StrumReport | null;
 		/** Settled chords, oldest first. */
 		history: HistoryEntry[];
 		/** Whether audio is flowing. */
@@ -25,17 +27,17 @@
 		/** Switches to the strum tuning check. */
 		onTune?: () => void;
 	}
-	let { strings, report, history, listening, onTune }: Props = $props();
+	let { strings, report, shown, history, listening, onTune }: Props = $props();
 
 	const FRETS_SHOWN = 4;
-	let chord = $derived(report?.chord ?? null);
+	let chord = $derived(shown?.chord ?? null);
 	let analysis = $derived(chord?.analysis ?? null);
 	/** The key of the recent chords and what could come next. */
 	let key = $derived(detectKey(history.map((h) => h.analysis)));
 	let next = $derived(key && history.length ? suggestNext(key, history.at(-1)!.analysis) : []);
 	/** Strings clearly out of tune, from a settled chord. */
 	let off = $derived(
-		report?.settled && chord
+		shown?.settled && chord
 			? offStrings(
 					strings.map((s) => s.name),
 					chord.cents
@@ -80,7 +82,7 @@
 	<p class="prompt" data-testid="chord-status">
 		{#if report && !report.settled}
 			Listening…
-		{:else if report && !chord}
+		{:else if report && !report.chord}
 			Couldn't make out a chord · strum again
 		{:else if report}
 			Strum the next chord
@@ -91,7 +93,7 @@
 		{/if}
 	</p>
 
-	<div class="name" data-testid="chord-name" class:pending={report && !report.settled}>
+	<div class="name" data-testid="chord-name" class:pending={shown && !shown.settled}>
 		{#if analysis}
 			{analysis.symbol}
 		{:else}

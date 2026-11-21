@@ -54,3 +54,61 @@ test('keeps the screen on while listening @a2', async ({ page }) => {
 		.poll(() => page.evaluate(() => (window as unknown as { wakeLocks: number }).wakeLocks))
 		.toBeGreaterThan(0);
 });
+
+test('uses the microphone only while focused and keeps the chord @chord-uke-c', async ({
+	page
+}) => {
+	await page.addInitScript(() => {
+		const w = window as unknown as { tracks: MediaStreamTrack[]; focus: boolean };
+		w.tracks = [];
+		w.focus = true;
+		document.hasFocus = () => w.focus;
+		const gum = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+		navigator.mediaDevices.getUserMedia = async (c) => {
+			const stream = await gum(c);
+			w.tracks.push(...stream.getTracks());
+			return stream;
+		};
+	});
+	const live = () =>
+		page.evaluate(
+			() =>
+				(window as unknown as { tracks: MediaStreamTrack[] }).tracks.filter(
+					(t) => t.readyState === 'live'
+				).length
+		);
+	const setFocus = (focus: boolean) =>
+		page.evaluate((focus) => {
+			(window as unknown as { focus: boolean }).focus = focus;
+			window.dispatchEvent(new Event(focus ? 'focus' : 'blur'));
+		}, focus);
+
+	await open(page, 'Chord');
+	await expect(page.getByTestId('chord-name')).toHaveText('C', { timeout: 15_000 });
+	expect(await live()).toBe(1);
+
+	await setFocus(false);
+	await expect(page.getByTestId('paused')).toBeVisible();
+	await expect.poll(live).toBe(0);
+	await expect(page.getByTestId('level')).toHaveCount(0);
+	// The chord stays on screen while paused.
+	await expect(page.getByTestId('chord-name')).toHaveText('C');
+
+	await setFocus(true);
+	await expect(page.getByTestId('paused')).toHaveCount(0);
+	await expect(page.getByTestId('level')).toBeVisible({ timeout: 10_000 });
+	expect(await live()).toBe(1);
+	await expect(page.getByTestId('chord-name')).toHaveText('C');
+});
+
+test('chord mode keeps the chord on screen between strums @chord-uke-c', async ({ page }) => {
+	await open(page, 'Chord');
+	await expect(page.getByTestId('chord-name')).toHaveText('C', { timeout: 15_000 });
+	// Sample the name through the next strum (every three seconds): never blank.
+	const names = new Set<string>();
+	for (let i = 0; i < 40; i++) {
+		names.add((await page.getByTestId('chord-name').textContent())!.trim());
+		await page.waitForTimeout(100);
+	}
+	expect([...names]).toEqual(['C']);
+});

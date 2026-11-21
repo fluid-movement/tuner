@@ -44,6 +44,12 @@
 	let mode = $state<Mode>('chord');
 	/** Last strum report (kept until the next strum) and when its strum began. */
 	let strum = $state<{ report: StrumReport; at: number } | null>(null);
+	/**
+	 * The chord on display: the latest report that named one. It stays until
+	 * the next strum names a chord, so a pending or unrecognised strum doesn't
+	 * blank it.
+	 */
+	let shownChord = $state<StrumReport | null>(null);
 	/** Settled chords, oldest first; repeats of the same chord collapse. */
 	let chords = $state<HistoryEntry[]>([]);
 	/** Whether audio is flowing; false while the browser waits for a gesture. */
@@ -82,7 +88,7 @@
 			error = describeStartError(err);
 			return;
 		}
-		await start();
+		await sync();
 	});
 
 	$effect(() => {
@@ -108,13 +114,22 @@
 	$effect(() => {
 		engine?.setPitch(mode === 'string');
 	});
+	// A different analysis: earlier results don't apply. (Not on engine
+	// restarts, which keep what was shown.)
+	$effect(() => {
+		void strumConfig;
+		strum = null;
+		shownChord = null;
+		settledChord = null;
+	});
 	$effect(() => {
 		const config = strumConfig;
-		strum = null;
 		engine?.setStrum(config).catch((err) => (error = describeStartError(err)));
 	});
 	let ukulele = $derived(tunings?.strings('ukulele') ?? []);
 
+	/** The last settled report that named a chord. */
+	let settledChord: StrumReport | null = null;
 	/** Onset of the last chord added to the history. */
 	let recordedOnset: number | null = null;
 
@@ -122,6 +137,12 @@
 		// Early and live reports refine the same strum: keep its start time.
 		const same = strum?.report.onsetSeconds === report.onsetSeconds;
 		strum = { report, at: same && strum ? strum.at : performance.now() };
+		// A tentative chord that settles to none falls back to the last
+		// settled chord.
+		if (report.chord) shownChord = report;
+		else if (shownChord && !shownChord.settled && shownChord.onsetSeconds === report.onsetSeconds)
+			shownChord = settledChord;
+		if (report.chord && report.settled) settledChord = report;
 		const analysis = report.chord?.analysis;
 		if (analysis && report.settled && recordedOnset !== report.onsetSeconds) {
 			recordedOnset = report.onsetSeconds;
@@ -162,6 +183,39 @@
 			error = describeStartError(err);
 		} finally {
 			starting = false;
+		}
+		// Focus may have gone while starting (blur is ignored meanwhile, as the
+		// permission prompt can take focus).
+		await sync();
+	}
+
+	/** Whether the app is on screen and focused: the only time it listens. */
+	const focused = () => document.visibilityState === 'visible' && document.hasFocus();
+	/** Stopped for lack of focus; starts again when focus returns. */
+	let paused = $state(false);
+
+	/**
+	 * Uses the microphone only while focused: stops the engine (releasing the
+	 * microphone) when the app is hidden or loses focus, and starts it again
+	 * when focus returns. Results on screen are kept.
+	 */
+	async function sync() {
+		if (starting) return;
+		if (focused()) {
+			if (paused || (!engine && !error)) {
+				paused = false;
+				await start();
+			}
+		} else if (engine) {
+			paused = true;
+			const stopping = engine;
+			engine = null;
+			running = false;
+			reading = null;
+			recordedOnset = null; // onsets restart with the next engine
+			await stopping.stop();
+		} else if (!error) {
+			paused = true; // opened in the background: start on focus
 		}
 	}
 
@@ -207,6 +261,7 @@
 			<ChordView
 				strings={ukulele}
 				report={strum?.report ?? null}
+				shown={shownChord}
 				history={chords}
 				listening={running}
 				onTune={() => {
@@ -281,8 +336,17 @@
 	{/if}
 </div>
 
-<svelte:window onpointerdown={() => engine && !running && wake()} />
-{#if engine && !running}
+<svelte:window
+	onpointerdown={() => engine && !running && wake()}
+	onfocus={() => void sync()}
+	onblur={() => void sync()}
+/>
+<svelte:document onvisibilitychange={() => void sync()} />
+{#if paused}
+	<div class="wake" data-testid="paused" role="status">
+		Microphone off while the app isn't focused
+	</div>
+{:else if engine && !running}
 	<!-- Taps go through to the page; any tap (window listener) starts audio. -->
 	<div class="wake" data-testid="wake" role="status">Tap anywhere to start listening</div>
 {/if}

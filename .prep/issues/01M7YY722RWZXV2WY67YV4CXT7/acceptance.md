@@ -1,0 +1,4 @@
+- [x] Losing focus or hiding the page stops all microphone tracks and shows a paused notice; focus starts listening again (e2e: pwa.test.ts)
+- [x] Chord history and the displayed chord survive a pause
+- [x] In chord mode the chord name never blanks between strums (e2e: pwa.test.ts)
+- [x] pnpm check, lint, test and test:e2e pass (except the pre-existing flaky progression test)
