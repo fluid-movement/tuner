@@ -1,0 +1,3 @@
+- [x] Tune shows only the strum check; no one-string switch, needle or string row remains
+- [x] The audio thread doesn't run single-note pitch detection
+- [x] pnpm check, lint, test and test:e2e pass

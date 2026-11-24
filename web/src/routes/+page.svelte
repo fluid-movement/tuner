@@ -14,10 +14,6 @@
 		type TrackReading
 	} from '#lib/wasm/tuner.ts';
 	import type { StrumConfig } from '#lib/audio/messages.ts';
-	import { InTuneLatch } from '#lib/tuner/in-tune.ts';
-	import CentsMeter from '#lib/components/CentsMeter.svelte';
-	import StringRow from '#lib/components/StringRow.svelte';
-	import Segmented from '#lib/components/Segmented.svelte';
 	import Sheet from '#lib/components/Sheet.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import StrumView from '#lib/components/StrumView.svelte';
@@ -28,25 +24,18 @@
 	import { keepScreenOn } from '#lib/wake-lock.ts';
 
 	/** What the app is doing: listening for chords, tuning, or looking up. */
-	type Mode = 'chord' | 'strum' | 'string' | 'lookup';
+	type Mode = 'chord' | 'strum' | 'lookup';
 	/** The tools that slide up over the listening screen. */
 	type SheetName = 'tune' | 'chords';
-	type TuneMode = 'strum' | 'string';
 	/** Chords kept in the history (structured, for key detection later). */
 	const HISTORY = 8;
-	const TUNE_KEY = 'tuner.tune';
 	const LEARN_KEY = 'tuner.learn';
 	const LOOKUP_KEY = 'tuner.lookup';
-	const TUNE_OPTIONS = [
-		{ value: 'strum', label: 'Whole strum' },
-		{ value: 'string', label: 'One string' }
-	] as const;
 	/** Four Strings is a ukulele app; the core also knows the guitar. */
 	const instrument: Instrument = 'ukulele';
 
 	let sheet = $state<SheetName | null>(null);
-	let tuneMode = $state<TuneMode>('strum');
-	let mode = $derived<Mode>(sheet === 'chords' ? 'lookup' : sheet === 'tune' ? tuneMode : 'chord');
+	let mode = $derived<Mode>(sheet === 'chords' ? 'lookup' : sheet === 'tune' ? 'strum' : 'chord');
 	/** Explanations on (Learn) or a clean view (Simple, the default). */
 	let learn = $state(false);
 	/** The chord shown in the lookup. */
@@ -68,25 +57,15 @@
 	let engine = $state<TunerEngine | null>(null);
 	let starting = $state(false);
 	let error = $state<string | null>(null);
-	/** Latest output of the note tracker (smoothed, held), or null. */
+	/** Latest level reading from the audio thread (for the meter), or null. */
 	let reading = $state<TrackReading | null>(null);
-	let debug = $state(false);
 
-	const latch = new InTuneLatch();
-
-	let frequency = $derived(reading?.frequency ?? null);
-	let holding = $derived(reading?.state === 'holding');
 	let strings = $derived(tunings?.strings(instrument) ?? []);
-	let target = $derived(frequency && tunings ? tunings.nearest(instrument, frequency) : null);
-	let note = $derived(frequency && tunings ? tunings.note(frequency) : null);
-	let inTune = $derived(latch.update(target?.cents ?? null));
 
 	onMount(async () => {
-		debug = new URLSearchParams(location.search).has('debug');
 		// A reload starts on the listening screen, not in a sheet.
 		if (history.state?.sheet) history.replaceState(null, '');
 		try {
-			if (localStorage.getItem(TUNE_KEY) === 'string') tuneMode = 'string';
 			learn = localStorage.getItem(LEARN_KEY) === '1';
 			const chord = JSON.parse(localStorage.getItem(LOOKUP_KEY) ?? 'null');
 			if (
@@ -110,7 +89,6 @@
 
 	$effect(() => {
 		try {
-			localStorage.setItem(TUNE_KEY, tuneMode);
 			localStorage.setItem(LEARN_KEY, learn ? '1' : '0');
 			localStorage.setItem(LOOKUP_KEY, JSON.stringify(lookup));
 		} catch {
@@ -127,10 +105,6 @@
 				? { instrument: 'ukulele', analysis: 'chord' }
 				: null
 	);
-	// The single-note tracker only runs in string mode.
-	$effect(() => {
-		engine?.setPitch(mode === 'string');
-	});
 	// A different analysis: the last report doesn't apply. The chord on
 	// display stays (tuning reports never name one), so it is still there
 	// after tuning. (Not on engine restarts, which keep what was shown.)
@@ -261,19 +235,6 @@
 	}
 
 	onDestroy(() => engine?.stop());
-
-	const fmtCents = (c: number) => `${c >= 0 ? '+' : '−'}${Math.abs(c).toFixed(1)}`;
-	let status = $derived(
-		!running
-			? 'Starting microphone…'
-			: !target
-				? 'Play a string'
-				: inTune
-					? 'In tune'
-					: target.cents < 0
-						? 'Flat · tune up'
-						: 'Sharp · tune down'
-	);
 </script>
 
 <svelte:head>
@@ -311,10 +272,7 @@
 				lookup = { root, suffix };
 				openSheet('chords');
 			}}
-			onTune={() => {
-				tuneMode = 'strum';
-				openSheet('tune');
-			}}
+			onTune={() => openSheet('tune')}
 		/>
 
 		{#if running && !sheet}
@@ -334,60 +292,12 @@
 
 {#if sheet === 'tune'}
 	<Sheet title="Tune" onclose={closeSheet} testid="tune-sheet">
-		<div class="tune-switch">
-			<Segmented label="Tuner" options={TUNE_OPTIONS} bind:value={tuneMode} />
-		</div>
-		{#if tuneMode === 'strum'}
-			<StrumView
-				{strings}
-				report={strum?.report ?? null}
-				age={strum ? Math.max(0, (now - strum.at) / 1000) : null}
-				listening={running}
-			/>
-		{:else}
-			<section class="readout" class:holding aria-live="polite">
-				<div class="note" class:in-tune={inTune}>
-					{#if note}
-						<span data-testid="note"
-							>{note.name.replace(/-?\d+$/, '')}<sub>{note.name.match(/-?\d+$/)?.[0]}</sub></span
-						>
-					{:else}
-						<span class="placeholder">–</span>
-					{/if}
-				</div>
-				<p class="status" data-testid="status" class:in-tune={inTune}>
-					{status}
-					{#if holding}<span class="hold" data-testid="hold">Hold</span>{/if}
-				</p>
-				<CentsMeter cents={target?.cents ?? null} {inTune} />
-				<p class="numbers">
-					{#if target && frequency}
-						<span data-testid="cents">{fmtCents(target.cents)} cents</span>
-						<span class="sep">·</span>
-						<span data-testid="frequency">{frequency.toFixed(2)} Hz</span>
-					{:else}
-						&nbsp;
-					{/if}
-				</p>
-			</section>
-
-			<StringRow {strings} active={target?.string.index ?? null} {inTune} />
-
-			{#if debug && reading}
-				<dl class="debug" data-testid="debug">
-					<dt>state</dt>
-					<dd>{reading.state}{reading.locked ? ' (locked)' : ''}</dd>
-					<dt>raw</dt>
-					<dd>{reading.rawFrequency?.toFixed(2) ?? '–'} Hz</dd>
-					<dt>clarity</dt>
-					<dd>{reading.clarity.toFixed(2)}</dd>
-					<dt>level</dt>
-					<dd>{reading.levelDb.toFixed(1)} dBFS</dd>
-					<dt>floor</dt>
-					<dd>{reading.floorDb.toFixed(1)} dBFS</dd>
-				</dl>
-			{/if}
-		{/if}
+		<StrumView
+			{strings}
+			report={strum?.report ?? null}
+			age={strum ? Math.max(0, (now - strum.at) / 1000) : null}
+			listening={running}
+		/>
 		{#if running}
 			<LevelMeter levelDb={reading?.levelDb ?? null} floorDb={reading?.floorDb ?? null} />
 		{/if}
@@ -468,10 +378,6 @@
 			font-size: 0.9rem;
 		}
 	}
-	.tune-switch {
-		display: flex;
-		justify-content: center;
-	}
 	main {
 		flex: 1;
 		display: flex;
@@ -480,75 +386,6 @@
 		   without a band of empty space above it. */
 		justify-content: flex-start;
 		gap: 16px;
-	}
-	.readout {
-		transition: opacity 200ms;
-		background: var(--surface);
-		border: 1px solid var(--line);
-		border-radius: var(--radius);
-		padding: 20px 16px 12px;
-		text-align: center;
-	}
-	.note {
-		font-size: clamp(4rem, 22vw, 6.5rem);
-		font-weight: 700;
-		line-height: 1;
-		font-variant-numeric: tabular-nums;
-		transition: color 120ms;
-	}
-	.note sub {
-		font-size: 0.35em;
-		font-weight: 500;
-		color: var(--muted);
-	}
-	.note.in-tune {
-		color: var(--in-tune);
-	}
-	.placeholder {
-		color: var(--line);
-	}
-	.status {
-		margin: 8px 0 12px;
-		color: var(--muted);
-		font-weight: 500;
-	}
-	.status.in-tune {
-		color: var(--in-tune);
-	}
-	/* The string has faded: keep the last reading, visibly older. */
-	.readout.holding {
-		opacity: 0.55;
-	}
-	.hold {
-		margin-left: 6px;
-		padding: 1px 6px;
-		border: 1px solid currentColor;
-		border-radius: 4px;
-		font-size: 0.75rem;
-		text-transform: uppercase;
-		letter-spacing: 0.04em;
-	}
-	.debug {
-		display: grid;
-		grid-template-columns: auto 1fr;
-		gap: 2px 12px;
-		margin: 0;
-		font:
-			0.8rem ui-monospace,
-			monospace;
-		color: var(--muted);
-	}
-	.debug dd {
-		margin: 0;
-	}
-	.numbers {
-		margin: 8px 0 0;
-		color: var(--muted);
-		font-variant-numeric: tabular-nums;
-		font-size: 0.9rem;
-	}
-	.sep {
-		margin: 0 6px;
 	}
 	footer {
 		text-align: center;

@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { open } from './open.ts';
 
-test('Chrome finds the app installable @a4', async ({ page }) => {
+test('Chrome finds the app installable @chord-uke-c', async ({ page }) => {
 	await page.goto('/');
 	const href = await page.locator('link[rel="manifest"]').getAttribute('href');
 	const manifest = await (await page.request.get(new URL(href!, page.url()).href)).json();
@@ -40,7 +40,7 @@ test('works offline once loaded @chord-uke-c', async ({ page, context }) => {
 	expect(errors).toEqual([]);
 });
 
-test('keeps the screen on while listening @a4', async ({ page }) => {
+test('keeps the screen on while listening @chord-uke-c', async ({ page }) => {
 	await page.addInitScript(() => {
 		const w = window as unknown as { wakeLocks: number };
 		w.wakeLocks = 0;
@@ -53,7 +53,7 @@ test('keeps the screen on while listening @a4', async ({ page }) => {
 			}
 		});
 	});
-	await open(page, 'String');
+	await open(page, 'Chord');
 	await expect
 		.poll(() => page.evaluate(() => (window as unknown as { wakeLocks: number }).wakeLocks))
 		.toBeGreaterThan(0);
@@ -89,7 +89,7 @@ test('uses the microphone only while focused and keeps the chord @chord-uke-c', 
 
 	await open(page, 'Chord');
 	await expect(page.getByTestId('chord-name')).toHaveText('C', { timeout: 15_000 });
-	expect(await live()).toBe(1);
+	await expect.poll(live).toBe(1);
 
 	await setFocus(false);
 	await expect(page.getByTestId('paused')).toBeVisible();
@@ -101,7 +101,7 @@ test('uses the microphone only while focused and keeps the chord @chord-uke-c', 
 	await setFocus(true);
 	await expect(page.getByTestId('paused')).toHaveCount(0);
 	await expect(page.getByTestId('level')).toBeVisible({ timeout: 10_000 });
-	expect(await live()).toBe(1);
+	await expect.poll(live).toBe(1);
 	await expect(page.getByTestId('chord-name')).toHaveText('C');
 });
 
@@ -115,4 +115,18 @@ test('chord mode keeps the chord on screen between strums @chord-uke-c', async (
 		await page.waitForTimeout(100);
 	}
 	expect([...names]).toEqual(['C']);
+});
+
+test('fits a 320 px phone screen without horizontal scrolling @chord-uke-c', async ({ page }) => {
+	await page.setViewportSize({ width: 320, height: 640 });
+	await open(page, 'Chord');
+	await expect(page.getByTestId('chord-name')).toHaveText('C', { timeout: 15_000 });
+	const overflow = () =>
+		page.evaluate(
+			() => document.documentElement.scrollWidth - document.documentElement.clientWidth
+		);
+	expect(await overflow()).toBeLessThanOrEqual(0);
+	await page.getByRole('button', { name: 'Tune', exact: true }).click();
+	await expect(page.getByTestId('strum-G4')).toBeVisible();
+	expect(await overflow()).toBeLessThanOrEqual(0);
 });

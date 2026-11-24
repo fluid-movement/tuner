@@ -1,6 +1,8 @@
 import { expect, test } from '@playwright/test';
 
-test('chord lookup shows shapes and theory without the microphone @a4', async ({ page }) => {
+test('chord lookup shows shapes and theory without the microphone @chord-uke-c', async ({
+	page
+}) => {
 	await page.addInitScript(() => {
 		const w = window as unknown as { tracks: MediaStreamTrack[] };
 		w.tracks = [];

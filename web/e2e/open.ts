@@ -1,7 +1,7 @@
 import { expect, type Page } from '@playwright/test';
 
-/** Chord: the listening screen; Strum and String: the Tune sheet; Chords: lookup. */
-export type Mode = 'Chord' | 'Strum' | 'String' | 'Chords';
+/** Chord: the listening screen; Strum: the Tune sheet; Chords: lookup. */
+export type Mode = 'Chord' | 'Strum' | 'Chords';
 
 /**
  * Opens the app in `mode`. Listening starts on load; if the browser holds
@@ -26,6 +26,5 @@ export async function openTool(page: Page, mode: Mode) {
 	}
 	await page.getByRole('button', { name: 'Tune', exact: true }).click();
 	await expect(page.getByTestId('tune-sheet')).toBeVisible();
-	await page.locator('label', { hasText: mode === 'Strum' ? 'Whole strum' : 'One string' }).click();
 	await expect(page.getByTestId('level')).toBeVisible();
 }

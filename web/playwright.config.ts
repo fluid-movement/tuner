@@ -1,25 +1,11 @@
 import { defineConfig } from '@playwright/test';
 import { fileURLToPath } from 'node:url';
-import { writePluckWav, writeProgressionWav, writeStrumWav, writeToneWav } from './e2e/wav.ts';
-
-/**
- * Tones played by Chrome's fake microphone. Chrome takes the file at launch,
- * so each tone is a project; tests opt in with a tag such as `@e2`.
- */
-export const TONES = {
-	a4: 440,
-	g4: 391.99544,
-	'a4-flat': 440 * 2 ** (-10 / 1200),
-	c4: 261.62557
-} as const;
+import { writeProgressionWav, writeStrumWav } from './e2e/wav.ts';
 
 /** Test an already running deployment instead of a local preview build. */
 const external = process.env.E2E_BASE_URL;
 /** Preview port; set E2E_PORT to run several checkouts' tests in parallel. */
 const port = Number(process.env.E2E_PORT ?? 4173);
-
-/** A quiet (≈ −34 dBFS peak) decaying A4 pluck, re-plucked every 3 s. */
-export const PLUCK = { name: 'pluck', frequency: 440, period: 3 } as const;
 
 const cents = (f: number, c: number) => f * 2 ** (c / 1200);
 /** Strums with known detuning (cents from standard tuning, null = muted). */
@@ -50,6 +36,10 @@ export const PROGRESSION = {
 	frets: ['0003', '2000', '2010', '0232']
 };
 
+/**
+ * Chrome's fake microphone plays a WAV file chosen at launch, so each
+ * recording is a project; tests opt in with a tag such as `@chord-uke-c`.
+ */
 function fakeMic(name: string, write: (path: string) => void) {
 	const wav = fileURLToPath(new URL(`./test-results/fake-mic-${name}.wav`, import.meta.url));
 	write(wav);
@@ -79,10 +69,6 @@ export default defineConfig({
 		channel: 'chrome'
 	},
 	projects: [
-		...Object.entries(TONES).map(([name, frequency]) =>
-			fakeMic(name, (wav) => writeToneWav(wav, frequency))
-		),
-		fakeMic(PLUCK.name, (wav) => writePluckWav(wav, PLUCK.frequency, { period: PLUCK.period })),
 		...Object.entries(STRUMS).map(([name, strum]) =>
 			fakeMic(name, (wav) =>
 				writeStrumWav(

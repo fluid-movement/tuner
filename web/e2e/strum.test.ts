@@ -40,10 +40,9 @@ for (const [name, strum] of Object.entries(STRUMS)) {
 	});
 }
 
-test('the strum check is the default tuner @strum-uke-muted', async ({ page }) => {
+test('Tune opens the strum check; back closes it @strum-uke-muted', async ({ page }) => {
 	await page.goto('/');
 	await page.getByRole('button', { name: 'Tune', exact: true }).click();
-	await expect(page.getByRole('radio', { name: 'Whole strum' })).toBeChecked();
 	await expect(page.getByTestId('strum-G4')).toBeVisible();
 	// The back gesture closes the sheet and returns to listening for chords.
 	await page.goBack();
@@ -91,7 +90,6 @@ test('chord mode points out a detuned string @chord-uke-c-flat', async ({ page }
 	await expect(page.getByTestId('chord-intonation')).toContainText('C string ~22 c flat');
 	await page.getByTestId('chord-intonation').getByRole('button', { name: 'Tune' }).click();
 	await expect(page.getByTestId('tune-sheet')).toBeVisible();
-	await expect(page.getByRole('radio', { name: 'Whole strum' })).toBeChecked();
 	await expect(page.getByTestId('strum-C4')).toBeVisible();
 });
 

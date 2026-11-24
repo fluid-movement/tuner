@@ -30,7 +30,7 @@ class TunerProcessor extends AudioWorkletProcessor {
 	/** Forwards raw audio to the strum worker while strum mode is on. */
 	#strumPort: MessagePort | null = null;
 	/** Pitch detection wanted (applied once the tuner exists). */
-	#pitch = true;
+	#pitch = false;
 	/** Frames since the last level-only post (see `process`). */
 	#skipped = 0;
 	readonly #strumChunks = new FrameAccumulator(STRUM_CHUNK, STRUM_CHUNK);
