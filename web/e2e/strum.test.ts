@@ -102,7 +102,12 @@ test('chord mode finds the key and suggests next chords @chord-uke-progression',
 	// C Am F G: one full round, then the key and numerals show.
 	await expect(history).toHaveCount(4, { timeout: 20_000 });
 	await expect(page.getByTestId('chord-key')).toContainText('C major');
-	const entries = (await history.allTextContents()).map((t) => t.replace(/\s+/g, ' ').trim());
+	// Repeat counts (×2) aren't checked: Chrome's fake microphone sometimes
+	// clicks (a misaligned 10 ms buffer), which reads as a re-strum of the
+	// ringing chord.
+	const entries = (await history.allTextContents()).map((t) =>
+		t.replace(/×\d+/, '').replace(/\s+/g, ' ').trim()
+	);
 	expect(entries).toEqual(expect.arrayContaining(['C I', 'Am vi', 'F IV', 'G V']));
 	// After G (V) the next ideas start with C (I), with a diagram and why.
 	const first = page.getByTestId('chord-next').locator('li').first();

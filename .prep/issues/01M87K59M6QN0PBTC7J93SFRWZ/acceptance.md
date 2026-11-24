@@ -1,0 +1,3 @@
+- [x] Progression e2e test passes 10/10 repeats
+- [x] Rust test: a clean C Am F G progression gives exactly one onset per strum at 44.1 and 48 kHz
+- [x] cargo test, clippy and the full e2e suite pass

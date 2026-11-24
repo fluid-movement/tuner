@@ -1,0 +1,1 @@
+web/e2e/strum.test.ts (progression test strips ×N from history entries); crates/tuner-core/src/strum.rs test ringing_chords_do_not_start_new_strums (browser-test progression at 44.1 and 48 kHz, several hop offsets).

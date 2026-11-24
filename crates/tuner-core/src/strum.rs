@@ -745,6 +745,61 @@ mod tests {
         }
     }
 
+    /// The browser tests' progression: ideal strings (10 harmonics, no
+    /// noise), one chord every 1.5 s, each faded out just before the next.
+    fn progression(frets: &[[u32; 4]], rounds: usize, lead: usize, rate: f32) -> Vec<f32> {
+        let opens = [392.0f32, 261.63, 329.63, 440.0];
+        let step = (1.5 * rate) as usize;
+        let mut x = vec![0.0f32; lead + step * frets.len() * rounds];
+        for k in 0..frets.len() * rounds {
+            let begin = lead + k * step;
+            for (s, &f) in frets[k % frets.len()].iter().enumerate() {
+                let freq = opens[s] * 2f32.powf(f as f32 / 12.0);
+                let start = begin + ((0.01 + 0.015 * s as f32) * rate) as usize;
+                let end = begin + step;
+                let tau_string = 1.2 * (110.0 / freq).powf(0.4);
+                for h in 1..=10 {
+                    let amp = 0.05 / (h as f32).powf(0.9);
+                    let tau = tau_string / (1.0 + 0.35 * (h - 1) as f32);
+                    for (i, v) in x.iter_mut().enumerate().take(end).skip(start) {
+                        let t = (i - start) as f32 / rate;
+                        let fade = ((end - i) as f32 / (0.01 * rate)).min(1.0);
+                        *v += fade
+                            * amp
+                            * (-t / tau).exp()
+                            * (std::f32::consts::TAU * freq * h as f32 * t).sin();
+                    }
+                }
+            }
+        }
+        x
+    }
+
+    #[test]
+    fn ringing_chords_do_not_start_new_strums() {
+        // C Am F G: one onset per strum, wherever the hops fall.
+        let frets = [[0, 0, 0, 3], [2, 0, 0, 0], [2, 0, 1, 0], [0, 2, 3, 2]];
+        let mut extra = vec![];
+        for (rate, lead) in [44_100.0, 48_000.0]
+            .into_iter()
+            .flat_map(|r| (0..1024).step_by(256).map(move |l| (r, l)))
+        {
+            let x = progression(&frets, 2, lead, rate);
+            let mut listener = StrumListener::new(rate, Instrument::Ukulele);
+            listener.set_analysis(Analysis::Chord);
+            let mut onsets: Vec<f64> = vec![];
+            for r in x.chunks(1024).filter_map(|c| listener.push(c)) {
+                if r.settled && onsets.last() != Some(&r.onset_seconds) {
+                    onsets.push(r.onset_seconds);
+                }
+            }
+            if onsets.len() != 8 {
+                extra.push((rate, lead, onsets));
+            }
+        }
+        assert!(extra.is_empty(), "{extra:?}");
+    }
+
     #[test]
     fn noise_and_single_decays_do_not_report() {
         let mut rng = Rng::new(9);
