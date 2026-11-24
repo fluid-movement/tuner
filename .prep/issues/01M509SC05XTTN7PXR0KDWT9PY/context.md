@@ -1,5 +1,4 @@
-See [Polyphonic string estimation](/components/poly-estimation.md) (findings of 01M509SBVQFQ26T79APJR7NNPK), [Note tracker](/components/note-tracker.md), [Audio pipeline](/components/audio-pipeline.md), [Recording analysis](/components/tuner-lab.md).
-
+Code: `crates/tuner-core/src/strum.rs` and `poly.rs` (analysis), `crates/tuner-lab` (recordings), `web/src/lib/audio/strum-worker.ts` (worker).
 Rust (tuner-core):
 - `strum` module: `StrumListener` fed with audio chunks; keeps ~1.2 s of history; detects strum onsets from the in-band envelope (the tuner-lab rule: rise ≥ 8 dB within 100 ms, ≥ 15 dB above background, ≥ 3 dB above the level 100–300 ms earlier; onsets within 80 ms merge); once 0.12 s + one analysis window has passed after an onset, runs `poly::estimate_resolved` and emits a `StrumReport` (per string: present?, cents, level).
 - Presence detection (research recommendation 4): a string counts as played only if its energy rose at the strum onset (clean partials, or the resolved unknown's explained energy for strings without clean partials). Measure on the poly_eval "one string muted" scenario.
