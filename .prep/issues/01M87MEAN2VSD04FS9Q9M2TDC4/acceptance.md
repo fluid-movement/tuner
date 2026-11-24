@@ -1,0 +1,7 @@
+- [x] Ideas, history chords, the chord of the day, practice and Play it in the lookup set a target; playing it lands with a quiet moment (green, ring, short vibration; reduced motion respected)
+- [x] Tuning closes itself when every string is in tune and the card says Ready
+- [x] First run explains before asking for the microphone; denied access explains how to allow it and offers the lookup
+- [x] Change times, best per pair, the new tag, my chords and the played mark in the lookup are kept on the device
+- [x] Practice sheet: week, chord of the day, one-minute changes, play along a progression in a key; session summary on return
+- [x] Learn explains a landed move
+- [x] pnpm check, lint, test (111) and test:e2e (24) pass

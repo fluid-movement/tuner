@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { StrumReport, TunerString } from '#lib/wasm/tuner.ts';
+	import { IN_TUNE_CENTS } from '#lib/tuner/intonation.ts';
 
 	interface Props {
 		strings: TunerString[];
@@ -9,10 +10,11 @@
 		age: number | null;
 		/** Whether the microphone is on. */
 		listening: boolean;
+		/** Every string is in tune: the check is done. */
+		tuned?: boolean;
 	}
-	let { strings, report, age, listening }: Props = $props();
+	let { strings, report, age, listening, tuned = false }: Props = $props();
 
-	const IN_TUNE_CENTS = 5;
 	type Verdict = 'in-tune' | 'flat' | 'sharp' | 'not-heard' | 'none';
 	const LABELS: Record<Verdict, string> = {
 		'in-tune': 'In tune',
@@ -39,11 +41,13 @@
 </script>
 
 <section class="strum" aria-live="polite">
-	<p class="prompt" data-testid="strum-status">
-		{#if report && age !== null}
+	<p class="prompt" class:tuned data-testid="strum-status">
+		{#if tuned}
+			All in tune ✓ · back to playing
+		{:else if report && age !== null}
 			Last strum {age < 1 ? 'just now' : `${Math.round(age)} s ago`} · strum again to re-check
 		{:else if listening}
-			Strum all strings, or pluck one
+			Strum all four strings
 		{:else}
 			Starting microphone…
 		{/if}
@@ -151,5 +155,9 @@
 	}
 	.not-heard {
 		opacity: 0.5;
+	}
+	.prompt.tuned {
+		color: var(--in-tune);
+		font-weight: 650;
 	}
 </style>

@@ -10,6 +10,11 @@ const port = Number(process.env.E2E_PORT ?? 4173);
 const cents = (f: number, c: number) => f * 2 ** (c / 1200);
 /** Strums with known detuning (cents from standard tuning, null = muted). */
 export const STRUMS = {
+	'strum-uke-tuned': {
+		strings: ['G4', 'C4', 'E4', 'A4'],
+		cents: [1, -1, 0, 2],
+		frequencies: [391.99544, 261.62557, 329.62756, 440]
+	},
 	'strum-uke-muted': {
 		strings: ['G4', 'C4', 'E4', 'A4'],
 		cents: [-15, 4, 0, null],

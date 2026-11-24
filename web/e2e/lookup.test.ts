@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { begin } from './open.ts';
 
 test('chord lookup shows shapes and theory without the microphone @chord-uke-c', async ({
 	page
@@ -20,7 +21,7 @@ test('chord lookup shows shapes and theory without the microphone @chord-uke-c',
 					(t) => t.readyState === 'live'
 				).length
 		);
-	await page.goto('/');
+	await begin(page);
 	await expect(page.getByTestId('level')).toBeVisible({ timeout: 10_000 });
 	await page.getByRole('button', { name: 'Chords', exact: true }).click();
 	await expect(page.getByTestId('chords-sheet')).toBeVisible();

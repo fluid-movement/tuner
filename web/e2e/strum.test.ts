@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { CHORDS, PROGRESSION, STRUMS } from '../playwright.config.ts';
-import { open } from './open.ts';
+import { begin, open } from './open.ts';
 
 /** Expected verdict for a string offset (null: muted). */
 function expected(cents: number | null) {
@@ -13,7 +13,8 @@ async function strumCheck(page: Page) {
 	await open(page, 'Strum');
 }
 
-for (const [name, strum] of Object.entries(STRUMS)) {
+// The in-tune take closes the sheet by itself (see practice.test.ts).
+for (const [name, strum] of Object.entries(STRUMS).filter(([n]) => n !== 'strum-uke-tuned')) {
 	test(`strum check shows each string's verdict @${name}`, async ({ page }) => {
 		await strumCheck(page);
 		await expect(page.getByTestId('strum-status')).toContainText('Last strum', { timeout: 15_000 });
@@ -41,7 +42,7 @@ for (const [name, strum] of Object.entries(STRUMS)) {
 }
 
 test('Tune opens the strum check; back closes it @strum-uke-muted', async ({ page }) => {
-	await page.goto('/');
+	await begin(page);
 	await page.getByRole('button', { name: 'Tune', exact: true }).click();
 	await expect(page.getByTestId('strum-G4')).toBeVisible();
 	// The back gesture closes the sheet and returns to listening for chords.
@@ -117,8 +118,17 @@ test('chord mode finds the key and suggests next chords @chord-uke-progression',
 	);
 	await expect(first.locator('svg')).toBeVisible();
 	expect(PROGRESSION.frets).toHaveLength(4);
-	// Tapping an idea opens it in the lookup.
+	// Tapping an idea aims at it: the app listens for C and lands it when
+	// the progression comes round.
 	await first.getByRole('button').click();
+	const target = page.getByTestId('target');
+	await expect(target).toHaveAttribute('data-kind', 'target');
+	await expect(page.getByTestId('target-text')).toContainText('C');
+	await expect(target).toHaveAttribute('data-landed', 'true', { timeout: 10_000 });
+	// Learn explains the move that landed it.
+	await expect(page.getByTestId('target-why')).toContainText('V → I');
+	// Its other shapes are one tap away.
+	await target.getByRole('button', { name: 'Shapes' }).click();
 	await expect(page.getByTestId('chords-sheet')).toBeVisible();
 	await expect(page.getByTestId('lookup-name')).toHaveText('C');
 	await expect(page.getByTestId('lookup-tab')).toHaveText('A|-3--|\nE|-0--|\nC|-0--|\nG|-0--|');

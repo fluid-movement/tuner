@@ -25,6 +25,8 @@
 		small?: boolean;
 		/** A thumbnail: no string names, for chord ideas. */
 		tiny?: boolean;
+		/** A preview: drawn faintly. */
+		faint?: boolean;
 		label?: string;
 		testid?: string;
 	}
@@ -34,6 +36,7 @@
 		tones = [],
 		small = false,
 		tiny = false,
+		faint = false,
 		label = 'Chord diagram',
 		testid
 	}: Props = $props();
@@ -64,6 +67,7 @@
 	class="diagram"
 	class:small
 	class:tiny
+	class:faint
 	role="img"
 	aria-label={label}
 	data-testid={testid}
@@ -105,6 +109,9 @@
 	}
 	.diagram.small {
 		width: 96px;
+	}
+	.diagram.faint {
+		opacity: 0.3;
 	}
 	.diagram.tiny {
 		width: 52px;

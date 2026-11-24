@@ -31,3 +31,21 @@ export function describeOff(off: OffString[]): string {
 		)
 		.join(', ');
 }
+
+/** The strum check calls a string in tune within this many cents. */
+export const IN_TUNE_CENTS = 5;
+
+/**
+ * Whether a settled strum check found every string sounding and in tune
+ * (`strings` in string order, as in a tuning report).
+ */
+export function allInTune(
+	strings: readonly { present: boolean | null; cents: number | null }[]
+): boolean {
+	return (
+		strings.length > 0 &&
+		strings.every(
+			(s) => s.present !== false && s.cents !== null && Math.abs(s.cents) <= IN_TUNE_CENTS
+		)
+	);
+}

@@ -3,6 +3,7 @@
 	import ChordDiagram, { tabLines } from './ChordDiagram.svelte';
 
 	import LearnToggle from './LearnToggle.svelte';
+	import { chordKeyOf } from '#lib/practice/daily.ts';
 
 	interface Props {
 		/** Root pitch class (0 = C). */
@@ -11,8 +12,18 @@
 		suffix: string;
 		/** Show the theory: description, notes and roles, keys. */
 		learn: boolean;
+		/** Collection keys of chords already played (see chordKeyOf). */
+		played?: Set<string>;
+		/** Aims at the chord on the listening screen. */
+		onplay?: (root: number, suffix: string) => void;
 	}
-	let { root = $bindable(), suffix = $bindable(), learn = $bindable() }: Props = $props();
+	let {
+		root = $bindable(),
+		suffix = $bindable(),
+		learn = $bindable(),
+		played = new Set(),
+		onplay
+	}: Props = $props();
 
 	const NAMES = ['G', 'C', 'E', 'A'];
 	/** Which shape is shown large (index into the shapes). */
@@ -72,6 +83,9 @@
 	<div class="card" aria-live="polite">
 		<div class="top"><LearnToggle bind:on={learn} /></div>
 		<div class="name" data-testid="lookup-name">{found.symbol}</div>
+		{#if played.has(chordKeyOf(root, suffix))}
+			<p class="played" data-testid="lookup-played">✓ You've played this</p>
+		{/if}
 		{#if analysis && learn}
 			<p class="about">
 				<span data-testid="lookup-description">{analysis.description}</span>
@@ -94,6 +108,11 @@
 				<pre class="tab" data-testid="lookup-tab">{tabLines(NAMES, shape.frets).join('\n')}</pre>
 			</div>
 
+			{#if onplay}
+				<button type="button" class="play" onclick={() => onplay(root, suffix)}
+					>Play it · I'll listen</button
+				>
+			{/if}
 			{#if learn}
 				<p class="notes" data-testid="lookup-notes">
 					{#each notes as n (n.name)}
@@ -280,5 +299,22 @@
 			0.85rem ui-monospace,
 			monospace;
 		color: var(--muted);
+	}
+	.played {
+		margin: -6px 0 0;
+		color: var(--in-tune);
+		font-size: 0.9rem;
+	}
+	.play {
+		justify-self: center;
+		min-height: 44px;
+		padding: 0 22px;
+		border: 0;
+		border-radius: 999px;
+		background: var(--accent);
+		color: #fff;
+		font: inherit;
+		font-weight: 600;
+		cursor: pointer;
 	}
 </style>
