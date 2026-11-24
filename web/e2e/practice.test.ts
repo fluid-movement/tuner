@@ -13,7 +13,10 @@ test('Play it in the lookup aims at the chord and lands it @chord-uke-c', async 
 	await open(page, 'Chords');
 	await page.getByTestId('lookup-roots').getByRole('radio', { name: 'C', exact: true }).click();
 	await page.getByTestId('lookup-types').getByRole('radio', { name: 'maj', exact: true }).click();
-	await page.getByTestId('chords-sheet').getByRole('button', { name: /Play it/ }).click();
+	await page
+		.getByTestId('chords-sheet')
+		.getByRole('button', { name: /Play it/ })
+		.click();
 	await expect(page.getByTestId('chords-sheet')).toHaveCount(0);
 	const target = page.getByTestId('target');
 	await expect(target).toContainText('From the lookup');
