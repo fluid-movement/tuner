@@ -9,14 +9,13 @@ function expected(cents: number | null) {
 	return cents < 0 ? 'flat' : 'sharp';
 }
 
-async function strumCheck(page: Page, instrument: 'Guitar' | 'Ukulele') {
+async function strumCheck(page: Page) {
 	await open(page, 'Strum');
-	await page.getByRole('radio', { name: instrument }).check({ force: true });
 }
 
 for (const [name, strum] of Object.entries(STRUMS)) {
 	test(`strum check shows each string's verdict @${name}`, async ({ page }) => {
-		await strumCheck(page, strum.instrument);
+		await strumCheck(page);
 		await expect(page.getByTestId('strum-status')).toContainText('Last strum', { timeout: 15_000 });
 		for (const [i, string] of strum.strings.entries()) {
 			const row = page.getByTestId(`strum-${string}`);
@@ -33,7 +32,7 @@ for (const [name, strum] of Object.entries(STRUMS)) {
 				.locator('[data-testid^="strum-"][data-verdict]')
 				.evaluateAll((rows) => rows.map((r) => r.getAttribute('data-verdict')));
 		// Two seconds on, the settled verdicts are still on screen (early
-		// reports may differ; guitar settles 0.8 s after the strum).
+		// reports may differ).
 		await expect(page.getByTestId('strum-status')).toContainText('Last strum 2 s ago');
 		expect(await verdicts()).toEqual(strum.cents.map(expected));
 		// The looping microphone strums again every three seconds.
@@ -41,13 +40,15 @@ for (const [name, strum] of Object.entries(STRUMS)) {
 	});
 }
 
-test('strum mode and instrument are remembered @strum-guitar', async ({ page }) => {
+test('the strum check is the default tuner @strum-uke-muted', async ({ page }) => {
 	await page.goto('/');
-	await page.getByRole('radio', { name: 'Strum', exact: true }).check({ force: true });
-	await page.getByRole('radio', { name: 'Ukulele' }).check({ force: true });
-	await page.reload();
-	await expect(page.getByRole('radio', { name: 'Strum', exact: true })).toBeChecked();
+	await page.getByRole('button', { name: 'Tune', exact: true }).click();
+	await expect(page.getByRole('radio', { name: 'Whole strum' })).toBeChecked();
 	await expect(page.getByTestId('strum-G4')).toBeVisible();
+	// The back gesture closes the sheet and returns to listening for chords.
+	await page.goBack();
+	await expect(page.getByTestId('tune-sheet')).toHaveCount(0);
+	await expect(page.getByTestId('chord-name')).toBeVisible();
 });
 
 for (const [name, chord] of Object.entries(CHORDS).filter(([n]) => n !== 'chord-uke-c-flat')) {
@@ -89,7 +90,8 @@ test('chord mode points out a detuned string @chord-uke-c-flat', async ({ page }
 	await expect(page.getByTestId('chord-name')).toHaveText('C', { timeout: 15_000 });
 	await expect(page.getByTestId('chord-intonation')).toContainText('C string ~22 c flat');
 	await page.getByTestId('chord-intonation').getByRole('button', { name: 'Tune' }).click();
-	await expect(page.getByRole('radio', { name: 'Strum', exact: true })).toBeChecked();
+	await expect(page.getByTestId('tune-sheet')).toBeVisible();
+	await expect(page.getByRole('radio', { name: 'Whole strum' })).toBeChecked();
 	await expect(page.getByTestId('strum-C4')).toBeVisible();
 });
 
@@ -119,7 +121,7 @@ test('chord mode finds the key and suggests next chords @chord-uke-progression',
 	expect(PROGRESSION.frets).toHaveLength(4);
 	// Tapping an idea opens it in the lookup.
 	await first.getByRole('button').click();
-	await expect(page.getByRole('radio', { name: 'Chords', exact: true })).toBeChecked();
+	await expect(page.getByTestId('chords-sheet')).toBeVisible();
 	await expect(page.getByTestId('lookup-name')).toHaveText('C');
 	await expect(page.getByTestId('lookup-tab')).toHaveText('A|-3--|\nE|-0--|\nC|-0--|\nG|-0--|');
 });

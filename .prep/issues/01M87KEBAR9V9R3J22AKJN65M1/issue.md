@@ -1,0 +1,11 @@
+---
+title: 'Four Strings: one listening screen with Tune and Chords sheets, ukulele only, calm polish'
+kind: code
+tags:
+  - ux
+priority: high
+---
+
+User (2026-11-24), settled in conversation. Rebrand the app as Four Strings (header, page title, installed-app name, apple title, icons). Ukulele only: guitar disappears from the UI (the core keeps it). Replace the mode tabs: the app is one listening screen (Play: strum a chord, see it, its shape, next-chord ideas, history); Tune and Chords open as sheets sliding up over it from buttons in the header, closable by a close button, the back gesture/button and Escape. Tune is one screen: the strum check by default, with a switch to the single-string tuner for fine tuning. Chords is the lookup (no microphone needed). Look: calm and minimal, today's neutral palette refined (type scale, spacing, icons, motion). The Learn switch, focus-only microphone and remembered choices keep working.
+
+## Open questions

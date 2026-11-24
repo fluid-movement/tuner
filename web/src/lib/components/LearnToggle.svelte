@@ -18,9 +18,7 @@
 
 <style>
 	.learn {
-		position: absolute;
-		top: 10px;
-		right: 10px;
+		flex: none;
 		min-height: 32px;
 		padding: 0 12px;
 		border: 1px solid var(--line);

@@ -1,11 +1,15 @@
 import { expect, test } from '@playwright/test';
 import { open } from './open.ts';
 
-test('Chrome finds the app installable @a2', async ({ page }) => {
+test('Chrome finds the app installable @a4', async ({ page }) => {
 	await page.goto('/');
 	const href = await page.locator('link[rel="manifest"]').getAttribute('href');
 	const manifest = await (await page.request.get(new URL(href!, page.url()).href)).json();
-	expect(manifest).toMatchObject({ name: 'Tuner', short_name: 'Tuner', display: 'standalone' });
+	expect(manifest).toMatchObject({
+		name: 'Four Strings',
+		short_name: 'Four Strings',
+		display: 'standalone'
+	});
 	const purposes = new Set<string>();
 	for (const icon of manifest.icons) {
 		const response = await page.request.get(new URL(icon.src, page.url()).href);
@@ -36,7 +40,7 @@ test('works offline once loaded @chord-uke-c', async ({ page, context }) => {
 	expect(errors).toEqual([]);
 });
 
-test('keeps the screen on while listening @a2', async ({ page }) => {
+test('keeps the screen on while listening @a4', async ({ page }) => {
 	await page.addInitScript(() => {
 		const w = window as unknown as { wakeLocks: number };
 		w.wakeLocks = 0;

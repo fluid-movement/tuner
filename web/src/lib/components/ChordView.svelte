@@ -72,20 +72,22 @@
 </script>
 
 <section class="chord" aria-live="polite">
-	<LearnToggle bind:on={learn} />
-	<p class="prompt" data-testid="chord-status">
-		{#if report && !report.settled}
-			Listening…
-		{:else if report && !report.chord}
-			Couldn't make out a chord · strum again
-		{:else if report}
-			Strum the next chord
-		{:else if listening}
-			Strum a chord on your ukulele
-		{:else}
-			Starting microphone…
-		{/if}
-	</p>
+	<div class="top">
+		<p class="prompt" data-testid="chord-status">
+			{#if report && !report.settled}
+				Listening…
+			{:else if report && !report.chord}
+				Couldn't make out a chord · strum again
+			{:else if report}
+				Strum the next chord
+			{:else if listening}
+				Strum a chord
+			{:else}
+				Starting microphone…
+			{/if}
+		</p>
+		<LearnToggle bind:on={learn} />
+	</div>
 
 	<div class="name" data-testid="chord-name" class:pending={shown && !shown.settled}>
 		{#if analysis}
@@ -198,10 +200,15 @@
 		gap: 12px;
 		text-align: center;
 	}
+	.top {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
+		text-align: left;
+	}
 	.prompt {
 		margin: 0;
-		/* Room for the Learn switch in the corner. */
-		padding: 0 64px;
 		color: var(--muted);
 		font-weight: 500;
 	}

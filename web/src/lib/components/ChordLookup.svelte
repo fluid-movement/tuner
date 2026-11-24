@@ -70,7 +70,7 @@
 	</div>
 
 	<div class="card" aria-live="polite">
-		<LearnToggle bind:on={learn} />
+		<div class="top"><LearnToggle bind:on={learn} /></div>
 		<div class="name" data-testid="lookup-name">{found.symbol}</div>
 		{#if analysis && learn}
 			<p class="about">
@@ -190,9 +190,12 @@
 		gap: 12px;
 		text-align: center;
 	}
+	.top {
+		display: flex;
+		justify-content: flex-end;
+		margin-bottom: -12px;
+	}
 	.name {
-		/* Clear of the Learn switch in the corner. */
-		margin-top: 28px;
 		font-size: clamp(3rem, 15vw, 4.5rem);
 		font-weight: 700;
 		line-height: 1;

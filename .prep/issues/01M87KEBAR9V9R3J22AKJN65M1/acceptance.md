@@ -1,0 +1,5 @@
+- [x] Header reads Four Strings with Tune and Chords; no mode tabs; no guitar anywhere in the UI
+- [x] Tune and Chords open as sheets; close button, back gesture and Escape close them; the chord on display survives tuning
+- [x] Tune: whole strum by default, one-string switch remembered; Chords: lookup without the microphone
+- [x] Manifest, apple title, page title and icons are Four Strings; no horizontal scroll at 320-390 px in light and dark
+- [x] cargo test, pnpm check, lint, test and test:e2e pass

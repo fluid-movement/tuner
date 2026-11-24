@@ -1,23 +1,22 @@
 import { expect, test, type Page } from '@playwright/test';
 import { open } from './open.ts';
 
-async function listen(page: Page, instrument: 'Guitar' | 'Ukulele' = 'Guitar') {
+async function listen(page: Page) {
 	await open(page, 'String');
-	await page.getByRole('radio', { name: instrument }).check({ force: true });
 }
 
-test('an in-tune low E lights up E2 @e2', async ({ page }) => {
+test('an in-tune G lights up the G string @g4', async ({ page }) => {
 	await listen(page);
-	await expect(page.getByTestId('string-E2')).toHaveAttribute('aria-current', 'true', {
+	await expect(page.getByTestId('string-G4')).toHaveAttribute('aria-current', 'true', {
 		timeout: 10_000
 	});
 	await expect(page.getByTestId('status')).toHaveText('In tune');
-	await expect(page.getByTestId('note')).toHaveText('E2');
+	await expect(page.getByTestId('note')).toHaveText('G4');
 });
 
-test('a flat A2 shows flat and not in tune @a2-flat', async ({ page }) => {
+test('a flat A shows flat and not in tune @a4-flat', async ({ page }) => {
 	await listen(page);
-	await expect(page.getByTestId('string-A2')).toHaveAttribute('aria-current', 'true', {
+	await expect(page.getByTestId('string-A4')).toHaveAttribute('aria-current', 'true', {
 		timeout: 10_000
 	});
 	await expect(page.getByTestId('status')).toHaveText('Flat · tune up');
@@ -29,30 +28,30 @@ test('a flat A2 shows flat and not in tune @a2-flat', async ({ page }) => {
 		.toBeCloseTo(-10, 0);
 });
 
-test('a C4 on ukulele lights up its C string @c4', async ({ page }) => {
-	await listen(page, 'Ukulele');
+test('a C4 lights up the C string @c4', async ({ page }) => {
+	await listen(page);
 	await expect(page.getByTestId('string-C4')).toHaveAttribute('aria-current', 'true', {
 		timeout: 10_000
 	});
 	await expect(page.getByTestId('status')).toHaveText('In tune');
 });
 
-test('the instrument choice survives a reload @a2', async ({ page }) => {
-	await page.goto('/');
-	await page.getByRole('radio', { name: 'String', exact: true }).check({ force: true });
+test('the tuner choice survives a reload @a4', async ({ page }) => {
+	await open(page, 'String');
 	const strings = page.getByRole('list', { name: 'Strings' }).getByRole('listitem');
-	await expect(strings).toHaveText(['E2', 'A2', 'D3', 'G3', 'B3', 'E4']);
-	await page.getByRole('radio', { name: 'Ukulele' }).check({ force: true });
 	await expect(strings).toHaveText(['G4', 'C4', 'E4', 'A4']);
 	await page.reload();
-	await expect(page.getByRole('radio', { name: 'Ukulele' })).toBeChecked();
+	// A reload starts on the listening screen; Tune remembers one string.
+	await expect(page.getByTestId('tune-sheet')).toHaveCount(0);
+	await page.getByRole('button', { name: 'Tune', exact: true }).click();
+	await expect(page.getByRole('radio', { name: 'One string' })).toBeChecked();
 	await expect(strings).toHaveText(['G4', 'C4', 'E4', 'A4']);
 });
 
-test('fits a 375 px phone screen without horizontal scrolling @a2', async ({ page }) => {
+test('fits a 375 px phone screen without horizontal scrolling @a4', async ({ page }) => {
 	await page.setViewportSize({ width: 375, height: 740 });
 	await listen(page);
-	await expect(page.getByTestId('note')).toHaveText('A2', { timeout: 10_000 });
+	await expect(page.getByTestId('note')).toHaveText('A4', { timeout: 10_000 });
 	const overflow = await page.evaluate(
 		() => document.documentElement.scrollWidth - document.documentElement.clientWidth
 	);
@@ -65,13 +64,13 @@ test('fits a 375 px phone screen without horizontal scrolling @a2', async ({ pag
 test('a quiet decaying pluck stays on screen through its decay @pluck', async ({ page }) => {
 	await open(page, 'String', '/?debug');
 	const note = page.getByTestId('note');
-	await expect(note).toHaveText('A2', { timeout: 10_000 });
+	await expect(note).toHaveText('A4', { timeout: 10_000 });
 	await expect(page.getByTestId('level')).toBeVisible();
 	await expect(page.getByTestId('debug')).toContainText('clarity');
 	// Sample the display for 2.5 s: the note never disappears (tracked, then
-	// held after the string fades) and always reads A2.
+	// held after the string fades) and always reads A4.
 	for (let i = 0; i < 10; i++) {
-		await expect(note).toHaveText('A2');
+		await expect(note).toHaveText('A4');
 		await page.waitForTimeout(250);
 	}
 });

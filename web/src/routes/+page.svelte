@@ -7,7 +7,6 @@
 		type TunerEngine
 	} from '#lib/audio/tuner-engine.ts';
 	import {
-		INSTRUMENTS,
 		Tunings,
 		instantiateTuner,
 		type Instrument,
@@ -19,6 +18,8 @@
 	import CentsMeter from '#lib/components/CentsMeter.svelte';
 	import StringRow from '#lib/components/StringRow.svelte';
 	import Segmented from '#lib/components/Segmented.svelte';
+	import Sheet from '#lib/components/Sheet.svelte';
+	import Icon from '#lib/components/Icon.svelte';
 	import StrumView from '#lib/components/StrumView.svelte';
 	import ChordView, { type HistoryEntry } from '#lib/components/ChordView.svelte';
 	import LevelMeter from '#lib/components/LevelMeter.svelte';
@@ -26,27 +27,26 @@
 	import { CHORD_TYPES } from '#lib/theory/lookup.ts';
 	import { keepScreenOn } from '#lib/wake-lock.ts';
 
+	/** What the app is doing: listening for chords, tuning, or looking up. */
 	type Mode = 'chord' | 'strum' | 'string' | 'lookup';
-	const MODES: readonly Mode[] = ['chord', 'strum', 'string', 'lookup'];
+	/** The tools that slide up over the listening screen. */
+	type SheetName = 'tune' | 'chords';
+	type TuneMode = 'strum' | 'string';
 	/** Chords kept in the history (structured, for key detection later). */
 	const HISTORY = 8;
-	const STORAGE_KEY = 'tuner.instrument';
-	const MODE_KEY = 'tuner.mode';
+	const TUNE_KEY = 'tuner.tune';
 	const LEARN_KEY = 'tuner.learn';
 	const LOOKUP_KEY = 'tuner.lookup';
-	const INSTRUMENT_OPTIONS = [
-		{ value: 'guitar', label: 'Guitar' },
-		{ value: 'ukulele', label: 'Ukulele' }
+	const TUNE_OPTIONS = [
+		{ value: 'strum', label: 'Whole strum' },
+		{ value: 'string', label: 'One string' }
 	] as const;
-	const MODE_OPTIONS = [
-		{ value: 'chord', label: 'Chord' },
-		{ value: 'strum', label: 'Strum' },
-		{ value: 'string', label: 'String' },
-		{ value: 'lookup', label: 'Chords' }
-	] as const;
+	/** Four Strings is a ukulele app; the core also knows the guitar. */
+	const instrument: Instrument = 'ukulele';
 
-	let instrument = $state<Instrument>('guitar');
-	let mode = $state<Mode>('chord');
+	let sheet = $state<SheetName | null>(null);
+	let tuneMode = $state<TuneMode>('strum');
+	let mode = $derived<Mode>(sheet === 'chords' ? 'lookup' : sheet === 'tune' ? tuneMode : 'chord');
 	/** Explanations on (Learn) or a clean view (Simple, the default). */
 	let learn = $state(false);
 	/** The chord shown in the lookup. */
@@ -83,11 +83,10 @@
 
 	onMount(async () => {
 		debug = new URLSearchParams(location.search).has('debug');
+		// A reload starts on the listening screen, not in a sheet.
+		if (history.state?.sheet) history.replaceState(null, '');
 		try {
-			const saved = localStorage.getItem(STORAGE_KEY);
-			if (INSTRUMENTS.includes(saved as Instrument)) instrument = saved as Instrument;
-			const savedMode = localStorage.getItem(MODE_KEY);
-			if (MODES.includes(savedMode as Mode)) mode = savedMode as Mode;
+			if (localStorage.getItem(TUNE_KEY) === 'string') tuneMode = 'string';
 			learn = localStorage.getItem(LEARN_KEY) === '1';
 			const chord = JSON.parse(localStorage.getItem(LOOKUP_KEY) ?? 'null');
 			if (
@@ -111,8 +110,7 @@
 
 	$effect(() => {
 		try {
-			localStorage.setItem(STORAGE_KEY, instrument);
-			localStorage.setItem(MODE_KEY, mode);
+			localStorage.setItem(TUNE_KEY, tuneMode);
 			localStorage.setItem(LEARN_KEY, learn ? '1' : '0');
 			localStorage.setItem(LOOKUP_KEY, JSON.stringify(lookup));
 		} catch {
@@ -120,9 +118,8 @@
 		}
 	});
 
-	// Strum analysis runs in strum mode (tuning, selected instrument) and
-	// chord mode (ukulele only for now); results for another setting don't
-	// apply.
+	// Strum analysis runs in the strum tuner and while listening for chords;
+	// results for the other analysis don't apply.
 	let strumConfig = $derived<StrumConfig | null>(
 		mode === 'strum'
 			? { instrument, analysis: 'tuning' }
@@ -134,19 +131,29 @@
 	$effect(() => {
 		engine?.setPitch(mode === 'string');
 	});
-	// A different analysis: earlier results don't apply. (Not on engine
-	// restarts, which keep what was shown.)
+	// A different analysis: the last report doesn't apply. The chord on
+	// display stays (tuning reports never name one), so it is still there
+	// after tuning. (Not on engine restarts, which keep what was shown.)
 	$effect(() => {
 		void strumConfig;
 		strum = null;
-		shownChord = null;
-		settledChord = null;
 	});
 	$effect(() => {
 		const config = strumConfig;
 		engine?.setStrum(config).catch((err) => (error = describeStartError(err)));
 	});
-	let ukulele = $derived(tunings?.strings('ukulele') ?? []);
+
+	/** Opens a sheet; the back button or gesture closes it again. */
+	function openSheet(next: SheetName) {
+		if (sheet === next) return;
+		if (sheet) history.replaceState({ sheet: next }, '');
+		else history.pushState({ sheet: next }, '');
+		sheet = next;
+	}
+	function closeSheet() {
+		if (history.state?.sheet) history.back();
+		else sheet = null;
+	}
 
 	/** The last settled report that named a chord. */
 	let settledChord: StrumReport | null = null;
@@ -220,7 +227,7 @@
 		void mode;
 		if (tunings) untrack(() => void sync());
 	});
-	/** Stopped (unfocused, or in chord lookup); starts again when that ends. */
+	/** Stopped (unfocused, or looking up chords); starts again when that ends. */
 	let paused = $state(false);
 
 	/**
@@ -270,42 +277,67 @@
 </script>
 
 <svelte:head>
-	<title>Tuner</title>
-	<meta name="description" content="Tuner for acoustic guitar and ukulele" />
+	<title>Four Strings</title>
+	<meta
+		name="description"
+		content="Strum your ukulele: see the chord, what comes next, and tune up"
+	/>
 </svelte:head>
 
 <div class="app">
 	<header>
-		<h1>Tuner</h1>
-		<Segmented label="Mode" options={MODE_OPTIONS} bind:value={mode} />
+		<h1 class="brand">Four Strings</h1>
+		<nav aria-label="Tools">
+			<button type="button" class="tool" aria-haspopup="dialog" onclick={() => openSheet('tune')}>
+				<Icon name="tune" />
+				<span>Tune</span>
+			</button>
+			<button type="button" class="tool" aria-haspopup="dialog" onclick={() => openSheet('chords')}>
+				<Icon name="chords" />
+				<span>Chords</span>
+			</button>
+		</nav>
 	</header>
-	{#if mode === 'strum' || mode === 'string'}
-		<div class="instrument">
-			<Segmented label="Instrument" options={INSTRUMENT_OPTIONS} bind:value={instrument} />
-		</div>
-	{/if}
 
 	<main>
-		{#if mode === 'chord'}
-			<ChordView
-				strings={ukulele}
-				report={strum?.report ?? null}
-				shown={shownChord}
-				history={chords}
-				listening={running}
-				bind:learn
-				onLookup={(root, suffix) => {
-					lookup = { root, suffix };
-					mode = 'lookup';
-				}}
-				onTune={() => {
-					instrument = 'ukulele';
-					mode = 'strum';
-				}}
-			/>
-		{:else if mode === 'lookup'}
-			<ChordLookup bind:root={lookup.root} bind:suffix={lookup.suffix} bind:learn />
-		{:else if mode === 'strum'}
+		<ChordView
+			{strings}
+			report={mode === 'chord' ? (strum?.report ?? null) : null}
+			shown={shownChord}
+			history={chords}
+			listening={running}
+			bind:learn
+			onLookup={(root, suffix) => {
+				lookup = { root, suffix };
+				openSheet('chords');
+			}}
+			onTune={() => {
+				tuneMode = 'strum';
+				openSheet('tune');
+			}}
+		/>
+
+		{#if running && !sheet}
+			<LevelMeter levelDb={reading?.levelDb ?? null} floorDb={reading?.floorDb ?? null} />
+		{/if}
+	</main>
+
+	{#if error}
+		<footer>
+			<p role="alert">{error}</p>
+			{#if !engine && tunings}
+				<button class="primary" onclick={start} disabled={starting}>Try again</button>
+			{/if}
+		</footer>
+	{/if}
+</div>
+
+{#if sheet === 'tune'}
+	<Sheet title="Tune" onclose={closeSheet} testid="tune-sheet">
+		<div class="tune-switch">
+			<Segmented label="Tuner" options={TUNE_OPTIONS} bind:value={tuneMode} />
+		</div>
+		{#if tuneMode === 'strum'}
 			<StrumView
 				{strings}
 				report={strum?.report ?? null}
@@ -340,42 +372,37 @@
 			</section>
 
 			<StringRow {strings} active={target?.string.index ?? null} {inTune} />
-		{/if}
 
+			{#if debug && reading}
+				<dl class="debug" data-testid="debug">
+					<dt>state</dt>
+					<dd>{reading.state}{reading.locked ? ' (locked)' : ''}</dd>
+					<dt>raw</dt>
+					<dd>{reading.rawFrequency?.toFixed(2) ?? '–'} Hz</dd>
+					<dt>clarity</dt>
+					<dd>{reading.clarity.toFixed(2)}</dd>
+					<dt>level</dt>
+					<dd>{reading.levelDb.toFixed(1)} dBFS</dd>
+					<dt>floor</dt>
+					<dd>{reading.floorDb.toFixed(1)} dBFS</dd>
+				</dl>
+			{/if}
+		{/if}
 		{#if running}
 			<LevelMeter levelDb={reading?.levelDb ?? null} floorDb={reading?.floorDb ?? null} />
 		{/if}
-
-		{#if debug && reading}
-			<dl class="debug" data-testid="debug">
-				<dt>state</dt>
-				<dd>{reading.state}{reading.locked ? ' (locked)' : ''}</dd>
-				<dt>raw</dt>
-				<dd>{reading.rawFrequency?.toFixed(2) ?? '–'} Hz</dd>
-				<dt>clarity</dt>
-				<dd>{reading.clarity.toFixed(2)}</dd>
-				<dt>level</dt>
-				<dd>{reading.levelDb.toFixed(1)} dBFS</dd>
-				<dt>floor</dt>
-				<dd>{reading.floorDb.toFixed(1)} dBFS</dd>
-			</dl>
-		{/if}
-	</main>
-
-	{#if error}
-		<footer>
-			<p role="alert">{error}</p>
-			{#if !engine && tunings}
-				<button class="primary" onclick={start} disabled={starting}>Try again</button>
-			{/if}
-		</footer>
-	{/if}
-</div>
+	</Sheet>
+{:else if sheet === 'chords'}
+	<Sheet title="Chords" onclose={closeSheet} testid="chords-sheet">
+		<ChordLookup bind:root={lookup.root} bind:suffix={lookup.suffix} bind:learn />
+	</Sheet>
+{/if}
 
 <svelte:window
 	onpointerdown={() => engine && !running && wake()}
 	onfocus={() => void sync()}
 	onblur={() => void sync()}
+	onpopstate={() => (sheet = history.state?.sheet ?? null)}
 />
 <svelte:document onvisibilitychange={() => void sync()} />
 {#if paused && mode !== 'lookup'}
@@ -399,19 +426,51 @@
 		flex-direction: column;
 		gap: 14px;
 	}
-	.instrument {
-		display: flex;
-		justify-content: center;
-	}
 	header {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
 		gap: 12px;
 	}
-	h1 {
-		font-size: 1.25rem;
+	.brand {
 		margin: 0;
+		white-space: nowrap;
+		font-size: 1.2rem;
+		font-weight: 700;
+		letter-spacing: -0.02em;
+	}
+	nav {
+		display: flex;
+		gap: 6px;
+	}
+	.tool {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		min-height: 40px;
+		padding: 0 14px 0 10px;
+		border: 1px solid var(--line);
+		border-radius: 999px;
+		background: var(--surface);
+		color: var(--text);
+		font-weight: 550;
+		font-size: 0.95rem;
+		cursor: pointer;
+	}
+	/* Narrow phones: the name and both tools on one row. */
+	@media (max-width: 360px) {
+		.brand {
+			font-size: 1.05rem;
+		}
+		.tool {
+			gap: 4px;
+			padding: 0 10px 0 8px;
+			font-size: 0.9rem;
+		}
+	}
+	.tune-switch {
+		display: flex;
+		justify-content: center;
 	}
 	main {
 		flex: 1;
@@ -518,6 +577,7 @@
 	.wake {
 		position: fixed;
 		inset: 0;
+		z-index: 20;
 		display: grid;
 		place-items: center;
 		padding: 16px;

@@ -1,7 +1,7 @@
 {
-	"name": "Tuner",
-	"short_name": "Tuner",
-	"description": "Chord finder and tuner for ukulele and guitar",
+	"name": "Four Strings",
+	"short_name": "Four Strings",
+	"description": "Strum your ukulele: see the chord, what comes next, and tune up",
 	"id": "/",
 	"start_url": "/",
 	"scope": "/",
