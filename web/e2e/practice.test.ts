@@ -13,7 +13,7 @@ test('Play it in the lookup aims at the chord and lands it @chord-uke-c', async 
 	await open(page, 'Chords');
 	await page.getByTestId('lookup-roots').getByRole('radio', { name: 'C', exact: true }).click();
 	await page.getByTestId('lookup-types').getByRole('radio', { name: 'maj', exact: true }).click();
-	await page.getByRole('button', { name: /Play it/ }).click();
+	await page.getByTestId('chords-sheet').getByRole('button', { name: /Play it/ }).click();
 	await expect(page.getByTestId('chords-sheet')).toHaveCount(0);
 	const target = page.getByTestId('target');
 	await expect(target).toContainText('From the lookup');
@@ -101,4 +101,39 @@ test('the last session is summed up on return @chord-uke-c', async ({ page }) =>
 	);
 	await page.getByRole('button', { name: 'Dismiss' }).click();
 	await expect(page.getByTestId('session-summary')).toHaveCount(0);
+});
+
+test("today's chord invites a first target @chord-uke-c", async ({ page }) => {
+	// Nothing heard (microphone refused), so the card stays empty.
+	await page.addInitScript(() => {
+		navigator.mediaDevices.getUserMedia = () =>
+			Promise.reject(new DOMException('Permission denied', 'NotAllowedError'));
+	});
+	await begin(page);
+	const today = page.getByTestId('today');
+	await expect(today).toContainText("Today's chord");
+	await today.getByRole('button', { name: 'Play it' }).click();
+	await expect(page.getByTestId('target')).toContainText('Chord of the day');
+	await expect(today).toHaveCount(0);
+});
+
+test('a sheet closes with a swipe down @chord-uke-c', async ({ page }) => {
+	await open(page, 'Chords');
+	const bar = page.getByTestId('chords-sheet').getByRole('heading', { name: 'Chords' });
+	await page.waitForTimeout(400); // the sheet has slid in
+	const box = (await bar.boundingBox())!;
+	await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+	await page.mouse.down();
+	for (let dy = 20; dy <= 220; dy += 20) await page.mouse.move(box.x + box.width / 2, box.y + dy);
+	await page.mouse.up();
+	await expect(page.getByTestId('chords-sheet')).toHaveCount(0);
+	// A short drag springs back instead.
+	await page.getByRole('button', { name: 'Chords', exact: true }).click();
+	await page.waitForTimeout(400);
+	const b2 = (await bar.boundingBox())!;
+	await page.mouse.move(b2.x + 10, b2.y + 5);
+	await page.mouse.down();
+	await page.mouse.move(b2.x + 10, b2.y + 40);
+	await page.mouse.up();
+	await expect(page.getByTestId('chords-sheet')).toBeVisible();
 });

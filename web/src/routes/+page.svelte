@@ -562,6 +562,13 @@
 				</p>
 			{/if}
 
+			{#if !practice && !shownChord}
+				<p class="today" data-testid="today">
+					<span>Today's chord: <strong>{daily.symbol}</strong></span>
+					<button type="button" class="link" onclick={() => play(daily)}>Play it</button>
+				</p>
+			{/if}
+
 			{#if practice}
 				<TargetStrip
 					{practice}
@@ -710,12 +717,17 @@
 	}
 	.brand {
 		margin: 0;
+		min-width: 0;
 		white-space: nowrap;
+		/* Wide fonts on tiny screens: the name gives way, the tools don't. */
+		overflow: hidden;
+		text-overflow: ellipsis;
 		font-size: 1.2rem;
 		font-weight: 700;
 		letter-spacing: -0.02em;
 	}
 	nav {
+		flex: none;
 		display: flex;
 		gap: 6px;
 	}
@@ -794,6 +806,21 @@
 		margin: 0;
 		max-width: 360px;
 		color: var(--muted);
+	}
+	.today {
+		margin: 0;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px;
+		padding: 2px 4px 2px 14px;
+		border: 1px dashed var(--line);
+		border-radius: var(--radius);
+		color: var(--muted);
+		font-size: 0.95rem;
+	}
+	.today strong {
+		color: var(--text);
 	}
 	.summary {
 		margin: 0;

@@ -1,0 +1,4 @@
+- [x] Today's chord row shows before anything is aimed or heard; Play it aims at it (e2e)
+- [x] A swipe down closes a sheet; a short drag springs back (e2e)
+- [x] No horizontal scroll at 320 px with a wide font on every screen (e2e and manual check)
+- [x] pnpm check, lint, test and test:e2e pass

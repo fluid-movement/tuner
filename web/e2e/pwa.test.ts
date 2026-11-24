@@ -119,6 +119,15 @@ test('chord mode keeps the chord on screen between strums @chord-uke-c', async (
 
 test('fits a 320 px phone screen without horizontal scrolling @chord-uke-c', async ({ page }) => {
 	await page.setViewportSize({ width: 320, height: 640 });
+	// A wide font, as on CI runners and some phones (the local one is narrower).
+	await page.addInitScript(() => {
+		document.addEventListener('DOMContentLoaded', () => {
+			const style = document.createElement('style');
+			style.textContent =
+				':root, button { font-family: "DejaVu Sans", Verdana, sans-serif !important; }';
+			document.head.append(style);
+		});
+	});
 	await open(page, 'Chord');
 	await expect(page.getByTestId('chord-name')).toHaveText('C', { timeout: 15_000 });
 	const overflow = () =>
