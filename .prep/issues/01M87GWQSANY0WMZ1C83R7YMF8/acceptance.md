@@ -1,0 +1,1 @@
+- [x] Manifest theme_color and background_color are #121212; pwa e2e passes

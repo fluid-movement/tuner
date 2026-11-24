@@ -1,0 +1,10 @@
+---
+title: Installed app shows a light stripe under the page in dark mode
+kind: code
+tags:
+  - pwa
+---
+
+User report (2026-11-24, Android, installed PWA, dark mode): a light stripe at the bottom. Chrome colours the system navigation bar from the manifest theme_color, which was the light #f6f5f2 and can't follow prefers-color-scheme. Use the dark background #121212 for theme_color and background_color; the page's theme-color meta tags still colour the status bar per scheme.
+
+## Open questions
