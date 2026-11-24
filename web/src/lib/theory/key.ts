@@ -96,7 +96,91 @@ export interface Suggestion {
 	numeral: string;
 	/** Ukulele frets G C E A, or null if no playable shape was found. */
 	frets: number[] | null;
+	/** Root pitch class and chord-type suffix ('', 'm', 'dim'), for lookup. */
+	root: number;
+	suffix: string;
+	/** Why it can come next, e.g. "the dominant resolves home". */
+	reason: string;
 }
+
+/**
+ * Why a chord on degree `to` can follow one on `from` (semitones above the
+ * tonic): specific moves first, then what the target chord does in the key.
+ */
+const REASONS: Record<Mode, { moves: Record<string, string>; roles: Record<number, string> }> = {
+	major: {
+		moves: {
+			'7>0': 'the dominant resolves home',
+			'5>0': 'the plagal "amen" return home',
+			'11>0': 'the leading tone resolves up to the tonic',
+			'2>7': 'the classic set-up for the dominant (ii–V–I)',
+			'5>7': 'steps up and builds tension before home',
+			'0>7': 'out to the dominant: tension that wants to come back',
+			'9>7': 'steps down into the dominant',
+			'0>5': 'a step away from home, bright and open',
+			'9>5': 'the pop-song move (I–V–vi–IV)',
+			'7>5': 'a softer turn back, common in rock',
+			'2>5': 'a gentle step up, same family as ii',
+			'0>9': 'the relative minor: shares two notes with I',
+			'7>9': 'the deceptive cadence: you expect I and get vi',
+			'4>9': 'down a fifth, the strongest root move',
+			'5>2': 'same job as IV, a little darker',
+			'9>2': 'down a fifth, heading for V',
+			'0>2': 'up a step to a minor colour, often leads to V',
+			'11>4': 'down a fifth into iii'
+		},
+		roles: {
+			0: 'home: the tonic',
+			2: 'a minor chord that leads to V',
+			4: 'shares two notes with I, a soft colour',
+			5: 'the subdominant: moves away from home',
+			7: 'the dominant: pulls back to I',
+			9: 'the relative minor of the key',
+			11: 'unstable, wants to resolve to I'
+		}
+	},
+	minor: {
+		moves: {
+			'7>0': 'the raised 7th in V pulls home to i',
+			'5>0': 'the minor plagal return home',
+			'10>0': 'the folk and rock return home (♭VII–i)',
+			'2>7': 'sets up the dominant (ii°–V–i)',
+			'5>7': 'steps up and builds tension before home',
+			'0>7': 'out to the dominant: tension that wants to come back',
+			'0>5': 'a step away from home, darker',
+			'0>8': 'a warm lift to the major ♭VI',
+			'3>8': 'down a fifth, the strongest root move',
+			'8>10': 'climbs back to the tonic (♭VI–♭VII–i)',
+			'5>10': 'a bright step towards ♭III or i',
+			'10>3': 'down a fifth to the relative major',
+			'8>5': 'steps down to the subdominant',
+			'8>3': 'a lift to the relative major',
+			'0>10': 'a step down to the major ♭VII'
+		},
+		roles: {
+			0: 'home: the minor tonic',
+			2: 'diminished, leads to V',
+			3: 'the relative major: same notes as the key',
+			5: 'the minor subdominant: moves away from home',
+			7: 'the dominant (major in minor keys): pulls to i',
+			8: 'the major ♭VI, a warm colour',
+			10: 'the major ♭VII, leads to ♭III or i'
+		}
+	}
+};
+
+/** Why degree `to` can follow degree `from` in `mode`. */
+export function nextReason(mode: Mode, from: number, to: number): string {
+	const r = REASONS[mode];
+	return r.moves[`${from}>${to}`] ?? r.roles[to] ?? 'fits the key';
+}
+
+const TRIAD_SUFFIX: Record<Exclude<Triad, 'other'>, string> = {
+	major: '',
+	minor: 'm',
+	diminished: 'dim',
+	augmented: 'aug'
+};
 
 const pcsOf = (c: ChordAnalysis) => [...new Set(c.tones.map((t) => t.pc))];
 
@@ -166,7 +250,10 @@ export function suggestNext(key: Key, last: ChordAnalysis, count = 3): Suggestio
 		out.push({
 			symbol: analysis.symbol,
 			numeral: romanNumeral(key.tonic, analysis),
-			frets: findUkuleleShape(pcs)
+			frets: findUkuleleShape(pcs),
+			root,
+			suffix: TRIAD_SUFFIX[triad],
+			reason: nextReason(key.mode, inKey ? degree : -1, d)
 		});
 		if (out.length === count) break;
 	}

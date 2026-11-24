@@ -1,0 +1,5 @@
+- [x] One remembered Learn switch on the chord and lookup cards, default off (Simple)
+- [x] Simple hides descriptions, other names, note roles, notes, keys, numerals and reasons; Learn shows them (e2e)
+- [x] Next-chord ideas show small diagrams; in Learn each says why ('V → I · the dominant resolves home') (unit + e2e)
+- [x] Tapping an idea or a history chord opens it in the Chords lookup (e2e)
+- [x] pnpm check, lint, test and test:e2e pass

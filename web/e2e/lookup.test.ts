@@ -28,6 +28,9 @@ test('chord lookup shows shapes and theory without the microphone @a2', async ({
 	await page.getByTestId('lookup-roots').getByRole('radio', { name: 'G', exact: true }).click();
 	await page.getByTestId('lookup-types').getByRole('radio', { name: '7', exact: true }).click();
 	await expect(page.getByTestId('lookup-name')).toHaveText('G7');
+	// Simple (the default): shape only. Learn adds the theory.
+	await expect(page.getByTestId('lookup-notes')).toHaveCount(0);
+	await page.getByTestId('learn-toggle').click();
 	await expect(page.getByTestId('lookup-description')).toHaveText('dominant 7th');
 	await expect(page.getByTestId('lookup-tab')).toHaveText('A|-2--|\nE|-1--|\nC|-2--|\nG|-0--|');
 	await expect(page.getByTestId('lookup-notes')).toContainText('G R');

@@ -23,6 +23,8 @@
 		tones?: (ChordTone | null)[];
 		/** A smaller diagram, e.g. for alternative shapes. */
 		small?: boolean;
+		/** A thumbnail: no string names, for chord ideas. */
+		tiny?: boolean;
 		label?: string;
 		testid?: string;
 	}
@@ -31,6 +33,7 @@
 		frets,
 		tones = [],
 		small = false,
+		tiny = false,
 		label = 'Chord diagram',
 		testid
 	}: Props = $props();
@@ -52,7 +55,7 @@
 	const left = 24;
 	const top = 34;
 	const fretH = 30;
-	let H = $derived(top + rows * fretH + 36);
+	let H = $derived(top + rows * fretH + (tiny ? 8 : 36));
 	let gap = $derived((W - 2 * left) / Math.max(1, names.length - 1));
 </script>
 
@@ -60,6 +63,7 @@
 	viewBox="0 0 {W} {H}"
 	class="diagram"
 	class:small
+	class:tiny
 	role="img"
 	aria-label={label}
 	data-testid={testid}
@@ -83,7 +87,9 @@
 		{:else if frets && f !== undefined && f !== null}
 			<circle cx={x} cy={top + (f - base + 0.5) * fretH} r="9" class="dot" />
 		{/if}
-		{#if tones[i]}
+		{#if tiny}
+			<!-- No names: too small to read. -->
+		{:else if tones[i]}
 			<text {x} y={H - 18} class="note">{tones[i]!.name}</text>
 			<text {x} y={H - 2} class="role">{tones[i]!.role}</text>
 		{:else}
@@ -99,6 +105,13 @@
 	}
 	.diagram.small {
 		width: 96px;
+	}
+	.diagram.tiny {
+		width: 52px;
+	}
+	.tiny .fret,
+	.tiny .string {
+		stroke-width: 4;
 	}
 	.fret,
 	.string {
@@ -143,13 +156,13 @@
 	}
 	/* Short phone screens. */
 	@media (max-height: 700px) {
-		.diagram:not(.small) {
+		.diagram:not(.small, .tiny) {
 			width: 124px;
 		}
 	}
 	/* Tall phones: room for a bigger diagram. */
 	@media (min-height: 800px) {
-		.diagram:not(.small) {
+		.diagram:not(.small, .tiny) {
 			width: 176px;
 		}
 	}

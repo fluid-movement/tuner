@@ -12,7 +12,9 @@
 	import { detectKey, numeralIn, suggestNext } from '#lib/theory/key.ts';
 	import type { StrumReport, TunerString } from '#lib/wasm/tuner.ts';
 	import { describeOff, offStrings } from '#lib/tuner/intonation.ts';
+	import { lookupTarget } from '#lib/theory/lookup.ts';
 	import ChordDiagram, { tabLines } from './ChordDiagram.svelte';
+	import LearnToggle from './LearnToggle.svelte';
 
 	interface Props {
 		/** Ukulele strings in string order (G C E A). */
@@ -27,8 +29,21 @@
 		listening: boolean;
 		/** Switches to the strum tuning check. */
 		onTune?: () => void;
+		/** Show the theory: what chords are, the key, why ideas fit. */
+		learn: boolean;
+		/** Opens a chord in the lookup. */
+		onLookup?: (root: number, suffix: string) => void;
 	}
-	let { strings, report, shown, history, listening, onTune }: Props = $props();
+	let {
+		strings,
+		report,
+		shown,
+		history,
+		listening,
+		onTune,
+		learn = $bindable(),
+		onLookup
+	}: Props = $props();
 
 	let chord = $derived(shown?.chord ?? null);
 	let analysis = $derived(chord?.analysis ?? null);
@@ -52,9 +67,12 @@
 	});
 	const noteNames = $derived(strings.map((s) => s.name.replace(/-?\d+$/, '')));
 	let tab = $derived(tabLines(noteNames, chord?.frets ?? null));
+	/** The last chord's numeral in the key, for "V → I". */
+	let fromNumeral = $derived(key && history.length ? numeralIn(key, history.at(-1)!.analysis) : '');
 </script>
 
 <section class="chord" aria-live="polite">
+	<LearnToggle bind:on={learn} />
 	<p class="prompt" data-testid="chord-status">
 		{#if report && !report.settled}
 			Listening…
@@ -76,7 +94,7 @@
 			<span class="placeholder">–</span>
 		{/if}
 	</div>
-	{#if analysis}
+	{#if analysis && learn}
 		<p class="about">
 			<span data-testid="chord-description">{analysis.description}</span>
 			{#if analysis.alternatives.length}
@@ -91,37 +109,56 @@
 		<ChordDiagram
 			names={noteNames}
 			frets={chord?.frets ?? null}
-			tones={perString}
+			tones={learn ? perString : []}
 			testid="chord-diagram"
 		/>
 
 		<pre class="tab" data-testid="chord-tab">{tab.join('\n')}</pre>
 	</div>
 
-	{#if key}
+	{#if key && learn}
 		<p class="keys" data-testid="chord-key">
 			Key: <strong>{key.name}</strong>
 			<span class="sure">{key.confidence >= 0.3 ? 'likely' : 'maybe'}</span>
 		</p>
-		{#if next.length}
-			<ol class="next" aria-label="Next chord ideas" data-testid="chord-next">
+	{:else if analysis && learn}
+		<p class="keys" data-testid="chord-keys">
+			{#if analysis.keys.length}
+				In {analysis.keys
+					.slice(0, 3)
+					.map((k) => `${k.key} (${k.numeral})`)
+					.join(' · ')}
+			{:else}
+				Outside any single major key
+			{/if}
+		</p>
+	{/if}
+	{#if next.length}
+		<div class="ideas">
+			<p class="ideas-label">Try next</p>
+			<ol class="next" class:learn aria-label="Next chord ideas" data-testid="chord-next">
 				{#each next as s (s.symbol)}
 					<li>
-						<strong>{s.symbol}</strong> <span class="numeral">{s.numeral}</span>
-						{#if s.frets}<span class="frets">{s.frets.join('')}</span>{/if}
+						<button
+							type="button"
+							onclick={() => onLookup?.(s.root, s.suffix)}
+							aria-label="Look up {s.symbol}"
+						>
+							{#if s.frets}<ChordDiagram names={noteNames} frets={s.frets} tiny label="" />{/if}
+							<span class="idea">
+								<strong>{s.symbol}</strong>
+								{#if learn}
+									<span class="numeral">{s.numeral}</span>
+									<span class="why" data-testid="chord-next-reason"
+										>{fromNumeral} → {s.numeral} · {s.reason}</span
+									>
+								{/if}
+							</span>
+						</button>
 					</li>
 				{/each}
 			</ol>
-		{/if}
-	{:else if analysis?.keys.length}
-		<p class="keys" data-testid="chord-keys">
-			In {analysis.keys
-				.slice(0, 3)
-				.map((k) => `${k.key} (${k.numeral})`)
-				.join(' · ')}
-		</p>
-	{:else if analysis}
-		<p class="keys" data-testid="chord-keys">Outside any single major key</p>
+		</div>
 	{/if}
 
 	{#if off.length}
@@ -134,9 +171,16 @@
 	{#if history.length}
 		<ol class="history" aria-label="Recent chords" data-testid="chord-history">
 			{#each history as h, i (i)}
+				{@const target = lookupTarget(h.analysis)}
 				<li>
-					{h.analysis.symbol}{#if h.count > 1}<span class="count">×{h.count}</span>{/if}
-					{#if key}<span class="numeral">{numeralIn(key, h.analysis)}</span>{/if}
+					<button
+						type="button"
+						disabled={!target || !onLookup}
+						onclick={() => target && onLookup?.(target.root, target.suffix)}
+					>
+						{h.analysis.symbol}{#if h.count > 1}<span class="count">×{h.count}</span>{/if}
+						{#if key && learn}<span class="numeral">{numeralIn(key, h.analysis)}</span>{/if}
+					</button>
 				</li>
 			{/each}
 		</ol>
@@ -145,6 +189,7 @@
 
 <style>
 	.chord {
+		position: relative;
 		background: var(--surface);
 		border: 1px solid var(--line);
 		border-radius: var(--radius);
@@ -155,6 +200,8 @@
 	}
 	.prompt {
 		margin: 0;
+		/* Room for the Learn switch in the corner. */
+		padding: 0 64px;
 		color: var(--muted);
 		font-weight: 500;
 	}
@@ -236,23 +283,56 @@
 		justify-content: center;
 		gap: 8px;
 	}
-	.next li {
-		padding: 4px 10px;
+	.next li button {
+		height: 100%;
+		width: 100%;
+		display: grid;
+		justify-items: center;
+		gap: 4px;
+		padding: 6px 10px;
 		border: 1px solid var(--line);
 		border-radius: 10px;
-		font-size: 0.9rem;
+		background: transparent;
+		color: var(--text);
+		cursor: pointer;
+	}
+	.next.learn {
+		display: grid;
+		justify-content: stretch;
+	}
+	.next.learn li button {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		text-align: left;
+	}
+	.next.learn li button :global(svg) {
+		flex: none;
+	}
+	.idea {
+		display: grid;
+		grid-template-columns: auto 1fr;
+		align-items: baseline;
+		column-gap: 6px;
+	}
+	.why {
+		grid-column: 1 / -1;
+		color: var(--muted);
+		font-size: 0.85rem;
+	}
+	.ideas {
+		display: grid;
+		gap: 6px;
+	}
+	.ideas-label {
+		margin: 0;
+		color: var(--muted);
+		font-size: 0.85rem;
 	}
 	.numeral {
 		margin-left: 4px;
 		font-size: 0.8em;
 		opacity: 0.75;
-	}
-	.frets {
-		margin-left: 6px;
-		font:
-			0.85em ui-monospace,
-			monospace;
-		color: var(--muted);
 	}
 	.count {
 		margin-left: 2px;
@@ -267,14 +347,21 @@
 		justify-content: center;
 		gap: 6px;
 	}
-	.history li {
+	.history li button {
 		padding: 3px 10px;
 		border-radius: 999px;
 		background: var(--line);
 		font-weight: 600;
 		font-size: 0.9rem;
+		border: 0;
+		color: inherit;
+		cursor: pointer;
 	}
-	.history li:last-child {
+	.history li button:disabled {
+		color: inherit;
+		cursor: default;
+	}
+	.history li:last-child button {
 		background: var(--accent);
 		color: #fff;
 	}

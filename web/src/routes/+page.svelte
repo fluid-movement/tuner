@@ -23,6 +23,7 @@
 	import ChordView, { type HistoryEntry } from '#lib/components/ChordView.svelte';
 	import LevelMeter from '#lib/components/LevelMeter.svelte';
 	import ChordLookup from '#lib/components/ChordLookup.svelte';
+	import { CHORD_TYPES } from '#lib/theory/lookup.ts';
 	import { keepScreenOn } from '#lib/wake-lock.ts';
 
 	type Mode = 'chord' | 'strum' | 'string' | 'lookup';
@@ -31,6 +32,8 @@
 	const HISTORY = 8;
 	const STORAGE_KEY = 'tuner.instrument';
 	const MODE_KEY = 'tuner.mode';
+	const LEARN_KEY = 'tuner.learn';
+	const LOOKUP_KEY = 'tuner.lookup';
 	const INSTRUMENT_OPTIONS = [
 		{ value: 'guitar', label: 'Guitar' },
 		{ value: 'ukulele', label: 'Ukulele' }
@@ -44,6 +47,10 @@
 
 	let instrument = $state<Instrument>('guitar');
 	let mode = $state<Mode>('chord');
+	/** Explanations on (Learn) or a clean view (Simple, the default). */
+	let learn = $state(false);
+	/** The chord shown in the lookup. */
+	let lookup = $state({ root: 0, suffix: '' });
 	/** Last strum report (kept until the next strum) and when its strum began. */
 	let strum = $state<{ report: StrumReport; at: number } | null>(null);
 	/**
@@ -81,6 +88,15 @@
 			if (INSTRUMENTS.includes(saved as Instrument)) instrument = saved as Instrument;
 			const savedMode = localStorage.getItem(MODE_KEY);
 			if (MODES.includes(savedMode as Mode)) mode = savedMode as Mode;
+			learn = localStorage.getItem(LEARN_KEY) === '1';
+			const chord = JSON.parse(localStorage.getItem(LOOKUP_KEY) ?? 'null');
+			if (
+				Number.isInteger(chord?.root) &&
+				chord.root >= 0 &&
+				chord.root < 12 &&
+				CHORD_TYPES.some((t) => t.suffix === chord.suffix)
+			)
+				lookup = { root: chord.root, suffix: chord.suffix };
 		} catch {
 			// Storage may be unavailable (private mode); the default is fine.
 		}
@@ -97,6 +113,8 @@
 		try {
 			localStorage.setItem(STORAGE_KEY, instrument);
 			localStorage.setItem(MODE_KEY, mode);
+			localStorage.setItem(LEARN_KEY, learn ? '1' : '0');
+			localStorage.setItem(LOOKUP_KEY, JSON.stringify(lookup));
 		} catch {
 			// Not remembering the choice is acceptable.
 		}
@@ -275,13 +293,18 @@
 				shown={shownChord}
 				history={chords}
 				listening={running}
+				bind:learn
+				onLookup={(root, suffix) => {
+					lookup = { root, suffix };
+					mode = 'lookup';
+				}}
 				onTune={() => {
 					instrument = 'ukulele';
 					mode = 'strum';
 				}}
 			/>
 		{:else if mode === 'lookup'}
-			<ChordLookup />
+			<ChordLookup bind:root={lookup.root} bind:suffix={lookup.suffix} bind:learn />
 		{:else if mode === 'strum'}
 			<StrumView
 				{strings}

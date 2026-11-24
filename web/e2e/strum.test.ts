@@ -72,6 +72,9 @@ for (const [name, chord] of Object.entries(CHORDS).filter(([n]) => n !== 'chord-
 test('chord mode explains what a chord is @chord-uke-fadd9', async ({ page }) => {
 	await open(page, 'Chord');
 	await expect(page.getByTestId('chord-name')).toHaveText('Fadd9', { timeout: 15_000 });
+	// Simple (the default) leaves the theory out; Learn shows it.
+	await expect(page.getByTestId('chord-description')).toHaveCount(0);
+	await page.getByTestId('learn-toggle').click();
 	await expect(page.getByTestId('chord-description')).toHaveText('major triad, added 9th');
 	await expect(page.getByTestId('chord-alternatives')).toContainText('also');
 	await expect(page.getByTestId('chord-keys')).toHaveText(
@@ -94,15 +97,24 @@ test('chord mode finds the key and suggests next chords @chord-uke-progression',
 	page
 }) => {
 	await open(page, 'Chord');
+	await page.getByTestId('learn-toggle').click();
 	const history = page.getByTestId('chord-history').locator('li');
 	// C Am F G: one full round, then the key and numerals show.
 	await expect(history).toHaveCount(4, { timeout: 20_000 });
 	await expect(page.getByTestId('chord-key')).toContainText('C major');
 	const entries = (await history.allTextContents()).map((t) => t.replace(/\s+/g, ' ').trim());
 	expect(entries).toEqual(expect.arrayContaining(['C I', 'Am vi', 'F IV', 'G V']));
-	// After G (V) the next ideas start with C (I), with a ukulele shape.
-	await expect(page.getByTestId('chord-next').locator('li').first()).toHaveText(/C\s*I\s*0003/, {
-		timeout: 5_000
-	});
+	// After G (V) the next ideas start with C (I), with a diagram and why.
+	const first = page.getByTestId('chord-next').locator('li').first();
+	await expect(first).toContainText(/C\s*I/, { timeout: 5_000 });
+	await expect(first.getByTestId('chord-next-reason')).toHaveText(
+		'V → I · the dominant resolves home'
+	);
+	await expect(first.locator('svg')).toBeVisible();
 	expect(PROGRESSION.frets).toHaveLength(4);
+	// Tapping an idea opens it in the lookup.
+	await first.getByRole('button').click();
+	await expect(page.getByRole('radio', { name: 'Chords', exact: true })).toBeChecked();
+	await expect(page.getByTestId('lookup-name')).toHaveText('C');
+	await expect(page.getByTestId('lookup-tab')).toHaveText('A|-3--|\nE|-0--|\nC|-0--|\nG|-0--|');
 });

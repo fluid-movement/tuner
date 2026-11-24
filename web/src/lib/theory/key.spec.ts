@@ -73,6 +73,29 @@ describe('suggestNext', () => {
 		expect(suggestNext(minor, E7)[0].symbol).toBe('Am');
 	});
 
+	it('says why each chord can come next and how to look it up', () => {
+		const key = detectKey([C, Am, F, G])!;
+		const [first, second] = suggestNext(key, G);
+		expect(first).toMatchObject({
+			symbol: 'C',
+			root: 0,
+			suffix: '',
+			reason: 'the dominant resolves home'
+		});
+		expect(second.reason).toMatch(/deceptive/);
+		expect(second).toMatchObject({ root: 9, suffix: 'm' });
+		const minor = detectKey([Am, Dm, E7, Am])!;
+		expect(suggestNext(minor, E7)[0].reason).toMatch(/raised 7th/);
+	});
+
+	it('every suggestion has a reason', () => {
+		for (const k of [detectKey([C, Am, F, G])!, detectKey([Am, Dm, E7, Am])!]) {
+			for (const last of [C, Am, F, G, Dm, E7]) {
+				for (const s of suggestNext(k, last)) expect(s.reason.length).toBeGreaterThan(5);
+			}
+		}
+	});
+
 	it('never suggests the chord just played', () => {
 		const key = detectKey([C, F, G])!;
 		expect(suggestNext(key, C).map((s) => s.symbol)).not.toContain('C');

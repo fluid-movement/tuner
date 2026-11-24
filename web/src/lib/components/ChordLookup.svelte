@@ -1,33 +1,22 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { CHORD_TYPES, ROOTS, lookUpChord } from '#lib/theory/lookup.ts';
 	import ChordDiagram, { tabLines } from './ChordDiagram.svelte';
 
-	const STORAGE_KEY = 'tuner.lookup';
-	const NAMES = ['G', 'C', 'E', 'A'];
+	import LearnToggle from './LearnToggle.svelte';
 
-	let root = $state(0);
-	let suffix = $state('');
+	interface Props {
+		/** Root pitch class (0 = C). */
+		root: number;
+		/** Chord-type suffix ('' for major). */
+		suffix: string;
+		/** Show the theory: description, notes and roles, keys. */
+		learn: boolean;
+	}
+	let { root = $bindable(), suffix = $bindable(), learn = $bindable() }: Props = $props();
+
+	const NAMES = ['G', 'C', 'E', 'A'];
 	/** Which shape is shown large (index into the shapes). */
 	let picked = $state(0);
-
-	onMount(() => {
-		try {
-			const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null');
-			if (Number.isInteger(saved?.root) && saved.root >= 0 && saved.root < 12) root = saved.root;
-			if (CHORD_TYPES.some((t) => t.suffix === saved?.suffix)) suffix = saved.suffix;
-		} catch {
-			// Unavailable or invalid storage: start at C major.
-		}
-	});
-	$effect(() => {
-		try {
-			localStorage.setItem(STORAGE_KEY, JSON.stringify({ root, suffix }));
-		} catch {
-			// Not remembering the chord is acceptable.
-		}
-	});
-
 	/** "3203", or "7-10-8-7" once a fret has two digits. */
 	const fretText = (frets: number[]) => frets.join(frets.some((f) => f > 9) ? '-' : '');
 
@@ -81,8 +70,9 @@
 	</div>
 
 	<div class="card" aria-live="polite">
+		<LearnToggle bind:on={learn} />
 		<div class="name" data-testid="lookup-name">{found.symbol}</div>
-		{#if analysis}
+		{#if analysis && learn}
 			<p class="about">
 				<span data-testid="lookup-description">{analysis.description}</span>
 				{#if analysis.alternatives.length}
@@ -98,28 +88,30 @@
 				<ChordDiagram
 					names={NAMES}
 					frets={shape.frets}
-					tones={analysis?.tones}
+					tones={learn ? analysis?.tones : []}
 					testid="lookup-diagram"
 				/>
 				<pre class="tab" data-testid="lookup-tab">{tabLines(NAMES, shape.frets).join('\n')}</pre>
 			</div>
 
-			<p class="notes" data-testid="lookup-notes">
-				{#each notes as n (n.name)}
-					<span><strong>{n.name}</strong> <span class="role">{n.role}</span></span>
-				{/each}
-				{#if omitted}<span class="omit">5th left out</span>{/if}
-			</p>
-
-			{#if analysis?.keys.length}
-				<p class="keys" data-testid="lookup-keys">
-					In {analysis.keys
-						.slice(0, 3)
-						.map((k) => `${k.key} (${k.numeral})`)
-						.join(' · ')}
+			{#if learn}
+				<p class="notes" data-testid="lookup-notes">
+					{#each notes as n (n.name)}
+						<span><strong>{n.name}</strong> <span class="role">{n.role}</span></span>
+					{/each}
+					{#if omitted}<span class="omit">5th left out</span>{/if}
 				</p>
-			{:else}
-				<p class="keys" data-testid="lookup-keys">Outside any single major key</p>
+
+				{#if analysis?.keys.length}
+					<p class="keys" data-testid="lookup-keys">
+						In {analysis.keys
+							.slice(0, 3)
+							.map((k) => `${k.key} (${k.numeral})`)
+							.join(' · ')}
+					</p>
+				{:else}
+					<p class="keys" data-testid="lookup-keys">Outside any single major key</p>
+				{/if}
 			{/if}
 		{:else}
 			<p class="keys">No playable ukulele shape found</p>
@@ -189,6 +181,7 @@
 		color: #fff;
 	}
 	.card {
+		position: relative;
 		background: var(--surface);
 		border: 1px solid var(--line);
 		border-radius: var(--radius);
@@ -198,6 +191,8 @@
 		text-align: center;
 	}
 	.name {
+		/* Clear of the Learn switch in the corner. */
+		margin-top: 28px;
 		font-size: clamp(3rem, 15vw, 4.5rem);
 		font-weight: 700;
 		line-height: 1;

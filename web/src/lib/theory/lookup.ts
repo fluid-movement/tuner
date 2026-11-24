@@ -160,3 +160,14 @@ export function lookUpChord(root: number, type: ChordType, count = 4): LookedUp 
 	const symbol = shapes[0]?.analysis.symbol ?? `${ROOTS[root]}${type.suffix}`;
 	return { symbol, shapes };
 }
+
+/**
+ * The lookup entry (root and type) for an analysed chord, or null if its
+ * type isn't in the lookup (e.g. C7(b9)).
+ */
+export function lookupTarget(
+	analysis: Pick<ChordAnalysis, 'root' | 'rootName' | 'symbol'>
+): { root: number; suffix: string } | null {
+	const suffix = analysis.symbol.slice(analysis.rootName.length);
+	return CHORD_TYPES.some((t) => t.suffix === suffix) ? { root: analysis.root, suffix } : null;
+}
