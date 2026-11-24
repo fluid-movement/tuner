@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onDestroy, onMount } from 'svelte';
+	import { onDestroy, onMount, untrack } from 'svelte';
 	import {
 		describeStartError,
 		loadTunerBytes,
@@ -22,10 +22,11 @@
 	import StrumView from '#lib/components/StrumView.svelte';
 	import ChordView, { type HistoryEntry } from '#lib/components/ChordView.svelte';
 	import LevelMeter from '#lib/components/LevelMeter.svelte';
+	import ChordLookup from '#lib/components/ChordLookup.svelte';
 	import { keepScreenOn } from '#lib/wake-lock.ts';
 
-	type Mode = 'chord' | 'strum' | 'string';
-	const MODES: readonly Mode[] = ['chord', 'strum', 'string'];
+	type Mode = 'chord' | 'strum' | 'string' | 'lookup';
+	const MODES: readonly Mode[] = ['chord', 'strum', 'string', 'lookup'];
 	/** Chords kept in the history (structured, for key detection later). */
 	const HISTORY = 8;
 	const STORAGE_KEY = 'tuner.instrument';
@@ -37,7 +38,8 @@
 	const MODE_OPTIONS = [
 		{ value: 'chord', label: 'Chord' },
 		{ value: 'strum', label: 'Strum' },
-		{ value: 'string', label: 'String' }
+		{ value: 'string', label: 'String' },
+		{ value: 'lookup', label: 'Chords' }
 	] as const;
 
 	let instrument = $state<Instrument>('guitar');
@@ -189,9 +191,18 @@
 		await sync();
 	}
 
-	/** Whether the app is on screen and focused: the only time it listens. */
-	const focused = () => document.visibilityState === 'visible' && document.hasFocus();
-	/** Stopped for lack of focus; starts again when focus returns. */
+	/**
+	 * Whether to listen: the app is on screen and focused, and the mode uses
+	 * the microphone (chord lookup doesn't).
+	 */
+	const focused = () =>
+		mode !== 'lookup' && document.visibilityState === 'visible' && document.hasFocus();
+	// Entering or leaving chord lookup starts or stops listening.
+	$effect(() => {
+		void mode;
+		if (tunings) untrack(() => void sync());
+	});
+	/** Stopped (unfocused, or in chord lookup); starts again when that ends. */
 	let paused = $state(false);
 
 	/**
@@ -250,7 +261,7 @@
 		<h1>Tuner</h1>
 		<Segmented label="Mode" options={MODE_OPTIONS} bind:value={mode} />
 	</header>
-	{#if mode !== 'chord'}
+	{#if mode === 'strum' || mode === 'string'}
 		<div class="instrument">
 			<Segmented label="Instrument" options={INSTRUMENT_OPTIONS} bind:value={instrument} />
 		</div>
@@ -269,6 +280,8 @@
 					mode = 'strum';
 				}}
 			/>
+		{:else if mode === 'lookup'}
+			<ChordLookup />
 		{:else if mode === 'strum'}
 			<StrumView
 				{strings}
@@ -342,7 +355,7 @@
 	onblur={() => void sync()}
 />
 <svelte:document onvisibilitychange={() => void sync()} />
-{#if paused}
+{#if paused && mode !== 'lookup'}
 	<div class="wake" data-testid="paused" role="status">
 		Microphone off while the app isn't focused
 	</div>

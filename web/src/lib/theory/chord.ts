@@ -355,9 +355,11 @@ function keysFor(pcs: Set<number>, r: Reading): KeyFit[] {
 
 /**
  * Names and explains the chord formed by `midi` notes (in any order, e.g.
- * per string; doublings allowed). Null for no notes.
+ * per string; doublings allowed). Null for no notes. With `root`, the notes
+ * are read over that root (as for a chord looked up by name: 0000 is C6
+ * over C, not Am7); other readings become the alternatives.
  */
-export function analyseChord(midi: number[]): ChordAnalysis | null {
+export function analyseChord(midi: number[], root?: number): ChordAnalysis | null {
 	if (!midi.length) return null;
 	const pcs = new Set(midi.map((m) => ((m % 12) + 12) % 12));
 	const bass = ((Math.min(...midi) % 12) + 12) % 12;
@@ -367,6 +369,8 @@ export function analyseChord(midi: number[]): ChordAnalysis | null {
 			return read(root, intervals, bass);
 		})
 		.sort((a, b) => a.score - b.score || a.symbol.length - b.symbol.length);
+	const forced = root === undefined ? -1 : readings.findIndex((r) => r.root === root);
+	if (forced > 0) readings.unshift(...readings.splice(forced, 1));
 	const best = readings[0];
 
 	let description = best.words.join(', ');

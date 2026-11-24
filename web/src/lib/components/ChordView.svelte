@@ -12,6 +12,7 @@
 	import { detectKey, numeralIn, suggestNext } from '#lib/theory/key.ts';
 	import type { StrumReport, TunerString } from '#lib/wasm/tuner.ts';
 	import { describeOff, offStrings } from '#lib/tuner/intonation.ts';
+	import ChordDiagram, { tabLines } from './ChordDiagram.svelte';
 
 	interface Props {
 		/** Ukulele strings in string order (G C E A). */
@@ -29,7 +30,6 @@
 	}
 	let { strings, report, shown, history, listening, onTune }: Props = $props();
 
-	const FRETS_SHOWN = 4;
 	let chord = $derived(shown?.chord ?? null);
 	let analysis = $derived(chord?.analysis ?? null);
 	/** The key of the recent chords and what could come next. */
@@ -50,32 +50,8 @@
 		let k = 0;
 		return (chord?.frets ?? strings.map(() => null)).map((f) => (f === null ? null : tones[k++]));
 	});
-	let frets = $derived(chord?.frets ?? strings.map(() => null));
-	/** First fret shown in the diagram (1 unless the shape sits higher). */
-	let base = $derived.by(() => {
-		const fretted = frets.filter((f): f is number => f !== null && f > 0);
-		const top = fretted.length ? Math.max(...fretted) : 0;
-		return top <= FRETS_SHOWN ? 1 : Math.min(...fretted);
-	});
-	/** Tab lines, highest string on top (A E C G). */
-	let tab = $derived(
-		strings
-			.map((s, i) => {
-				const f = frets[i];
-				const cell = !chord ? '-' : f === null ? 'x' : String(f);
-				return `${s.name.replace(/-?\d+$/, '')}|-${cell.padEnd(2, '-')}-|`;
-			})
-			.reverse()
-	);
 	const noteNames = $derived(strings.map((s) => s.name.replace(/-?\d+$/, '')));
-
-	// Diagram geometry (SVG user units).
-	const W = 160;
-	const H = 190;
-	const left = 24;
-	const top = 34;
-	const fretH = 30;
-	let gap = $derived((W - 2 * left) / Math.max(1, strings.length - 1));
+	let tab = $derived(tabLines(noteNames, chord?.frets ?? null));
 </script>
 
 <section class="chord" aria-live="polite">
@@ -112,40 +88,12 @@
 	{/if}
 
 	<div class="shapes">
-		<svg
-			viewBox="0 0 {W} {H}"
-			class="diagram"
-			role="img"
-			aria-label="Chord diagram"
-			data-testid="chord-diagram"
-		>
-			{#if base > 1}
-				<text x="4" y={top + fretH / 2 + 4} class="base">{base}</text>
-			{:else}
-				<rect x={left - 1} y={top - 4} width={W - 2 * left + 2} height="5" class="nut" />
-			{/if}
-			{#each Array.from({ length: FRETS_SHOWN + 1 }, (_, i) => i) as i (i)}
-				<line x1={left} x2={W - left} y1={top + i * fretH} y2={top + i * fretH} class="fret" />
-			{/each}
-			{#each strings as s, i (s.index)}
-				{@const x = left + i * gap}
-				{@const f = frets[i]}
-				<line x1={x} x2={x} y1={top} y2={top + FRETS_SHOWN * fretH} class="string" />
-				{#if chord && f === null}
-					<text {x} y={top - 12} class="mark">×</text>
-				{:else if chord && f === 0}
-					<circle cx={x} cy={top - 16} r="5" class="open" />
-				{:else if chord && f !== null}
-					<circle cx={x} cy={top + (f - base + 0.5) * fretH} r="9" class="dot" />
-				{/if}
-				{#if perString[i]}
-					<text {x} y={H - 18} class="note">{perString[i]!.name}</text>
-					<text {x} y={H - 2} class="role">{perString[i]!.role}</text>
-				{:else}
-					<text {x} y={H - 18} class="label">{noteNames[i]}</text>
-				{/if}
-			{/each}
-		</svg>
+		<ChordDiagram
+			names={noteNames}
+			frets={chord?.frets ?? null}
+			tones={perString}
+			testid="chord-diagram"
+		/>
 
 		<pre class="tab" data-testid="chord-tab">{tab.join('\n')}</pre>
 	</div>
@@ -229,37 +177,6 @@
 		align-items: center;
 		gap: 16px 28px;
 	}
-	.diagram {
-		width: 150px;
-		height: auto;
-	}
-	.fret,
-	.string {
-		stroke: var(--muted);
-		stroke-width: 1.5;
-	}
-	.nut {
-		fill: var(--text);
-	}
-	.dot {
-		fill: var(--accent);
-	}
-	.open {
-		fill: none;
-		stroke: var(--text);
-		stroke-width: 1.5;
-	}
-	.note {
-		fill: var(--text);
-		font-size: 14px;
-		font-weight: 600;
-		text-anchor: middle;
-	}
-	.role {
-		fill: var(--accent);
-		font-size: 12px;
-		text-anchor: middle;
-	}
 	.about {
 		margin: -4px 0 0;
 		color: var(--muted);
@@ -273,20 +190,6 @@
 		margin: 0;
 		color: var(--muted);
 		font-size: 0.9rem;
-	}
-	.mark,
-	.label,
-	.base {
-		fill: var(--muted);
-		font-size: 13px;
-		text-anchor: middle;
-	}
-	.base {
-		text-anchor: start;
-	}
-	.mark {
-		font-size: 16px;
-		fill: var(--text);
 	}
 	.tab {
 		margin: 0;
@@ -384,9 +287,6 @@
 		.name {
 			font-size: 3.4rem;
 		}
-		.diagram {
-			width: 124px;
-		}
 		.tab {
 			font-size: 0.95rem;
 		}
@@ -396,9 +296,6 @@
 		.chord {
 			gap: 16px;
 			padding: 20px 16px;
-		}
-		.diagram {
-			width: 176px;
 		}
 		.tab {
 			font-size: 1.2rem;

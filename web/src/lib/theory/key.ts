@@ -9,6 +9,9 @@
 // found by search.
 
 import { analyseChord, romanNumeral, type ChordAnalysis } from './chord.ts';
+import { findUkuleleShape } from './lookup.ts';
+
+export { findUkuleleShape };
 
 const NAMES = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
 const MINOR_NAMES = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'G#', 'A', 'Bb', 'B'];
@@ -168,37 +171,4 @@ export function suggestNext(key: Key, last: ChordAnalysis, count = 3): Suggestio
 		if (out.length === count) break;
 	}
 	return out;
-}
-
-/** Ukulele G C E A, MIDI. */
-const UKULELE = [67, 60, 64, 69];
-
-/**
- * A playable ukulele shape (frets in string order G C E A) sounding only
- * `pcs` and all of them: low frets, a span of at most 3 frets between
- * fretted strings, open strings welcome. Null if none within 7 frets.
- */
-export function findUkuleleShape(pcs: number[]): number[] | null {
-	const want = new Set(pcs.map((pc) => ((pc % 12) + 12) % 12));
-	// Frets 0..7 per string that sound a wanted note.
-	const options = UKULELE.map((open) =>
-		[...Array(8).keys()].filter((f) => want.has((open + f) % 12))
-	);
-	let best: { frets: number[]; cost: number } | null = null;
-	const walk = (i: number, frets: number[]) => {
-		if (i === UKULELE.length) {
-			const covered = new Set(frets.map((f, s) => (UKULELE[s] + f) % 12));
-			if (covered.size !== want.size) return;
-			const fretted = frets.filter((f) => f > 0);
-			const span = fretted.length ? Math.max(...fretted) - Math.min(...fretted) : 0;
-			if (span > 3) return;
-			const top = Math.max(...frets);
-			const cost = 2 * top + frets.reduce((a, b) => a + b, 0) + span;
-			if (!best || cost < best.cost) best = { frets: [...frets], cost };
-			return;
-		}
-		for (const f of options[i]) walk(i + 1, [...frets, f]);
-	};
-	walk(0, []);
-	return (best as { frets: number[]; cost: number } | null)?.frets ?? null;
 }

@@ -1,0 +1,5 @@
+- [x] Mode switch has a fourth mode, Chords, remembered across reloads; no horizontal scroll at 320-390 px
+- [x] Root + type pickers; the page shows name, description, other names, diagram and tab, notes with roles, keys
+- [x] Common shapes come first (C 0003, Am 2000, F 2010, G7 0212, E 1402 …) and alternatives up the neck can be shown large (unit + e2e tests)
+- [x] Lookup mode releases the microphone; returning to chord mode listens again (e2e lookup.test.ts)
+- [x] pnpm check, lint, test and test:e2e pass

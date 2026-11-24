@@ -52,4 +52,17 @@
 		opacity: 0;
 		pointer-events: none;
 	}
+	/* Narrow phones: four modes and the title fit on one row. */
+	@media (max-width: 400px) {
+		label {
+			padding: 0 9px;
+			font-size: 0.9rem;
+		}
+	}
+	@media (max-width: 340px) {
+		label {
+			padding: 0 6px;
+			font-size: 0.85rem;
+		}
+	}
 </style>
