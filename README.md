@@ -1,12 +1,13 @@
-# Tuner
+# Four Strings
 
-Browser tuner for acoustic guitar and ukulele. Pitch analysis runs in a Rust core compiled to WebAssembly inside an AudioWorklet; the UI is a SvelteKit 3 static site.
+A ukulele companion in the browser: strum a chord and it names it, shows the shape and suggests what could come next; it tunes all four strings from one strum and helps you practise. Audio analysis runs in a Rust core compiled to WebAssembly (an AudioWorklet for the level, a Web Worker for strums); the UI is a SvelteKit 3 static site, installable as an offline PWA.
 
-The app listens as soon as it opens (browsers that need a gesture first show "Tap anywhere to start listening"). Three modes:
+- **Listening screen** (home): the chord you strum, with its diagram and tab, the time of a quick change ("Am → F · 1.4 s"), a history, the key and "Try next" ideas. Tapping an idea (or a history chord, today's chord, or *Play it* in the lookup) makes it a target: play it and it lands with a quiet green moment and a short vibration where supported. Strings clearly out of tune are pointed out. A **Learn** switch adds the theory: what a chord is, note roles, the key, and why each next chord works.
+- **Tune** (sheet): strum all four strings to see each one flat, sharp or in tune; when all are in tune the sheet closes by itself.
+- **Chords** (sheet): look up any chord by root and type (19 types) with its easiest shape, shapes up the neck and, in Learn mode, its notes, roles and keys.
+- **Practice** (sheet): the week, a chord of the day, one-minute chord changes, playing along a progression in any key, and the chords you have played. Progress stays on the device; there are no accounts.
 
-- **Chord** (default, ukulele only): strum a chord; shows its name (any combination of notes, with alternative readings), what it is, each string's note and role, a diagram and a tab. Keeps up with strumming patterns and ignores non-musical noise. The recent chords give the key, their Roman numerals and ideas for the next chord (with shapes); strings clearly out of tune are pointed out.
-- **Strum**: strum all strings (or pluck one) to see each string's offset; the first reading comes ~0.2 s after the strum (ukulele; ~0.3 s on guitar), refines as more audio arrives, and keeps updating while the strings ring.
-- **String**: classic single-string tuner.
+The first visit explains what the app does before the browser asks for the microphone; after that it listens as soon as it opens (browsers that need a gesture first show "Tap anywhere to start listening"). The microphone is used only while the app is focused and never in the lookup.
 
 - `crates/tuner-core`: pure Rust pitch analysis
 - `crates/tuner-wasm`: raw C-ABI WASM exports of the core
