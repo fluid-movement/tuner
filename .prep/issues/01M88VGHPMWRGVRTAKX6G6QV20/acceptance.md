@@ -1,0 +1,1 @@
+- [x] All icon sizes show the ukulele icon; maskable stays in the safe zone; the installability test passes

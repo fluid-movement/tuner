@@ -1,0 +1,1 @@
+web/static/icons/icon.svg (master; ukulele tilted -20°, off-white body, blue sound hole on #1c1c1e), PNGs rendered from it with Playwright (maskable at 0.92 scale: max 201 px from centre, inside the 205 px safe circle; apple-touch on a square), web/src/lib/assets/favicon.svg.

@@ -1,0 +1,11 @@
+---
+title: A more fitting app icon
+kind: code
+tags:
+  - pwa
+  - ux
+---
+
+User (2026-11-25): change the PWA icon to something more fitting for Four Strings (a ukulele companion), in the calm minimal look. All sizes: icon.svg, 192/512 PNG, maskable 512 (safe zone), apple-touch 180, favicon.
+
+## Open questions
