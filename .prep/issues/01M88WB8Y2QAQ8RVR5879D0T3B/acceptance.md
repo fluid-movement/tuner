@@ -1,0 +1,1 @@
+- [x] All four lines equal width and spacing in every icon size; installability test passes
