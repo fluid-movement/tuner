@@ -1,0 +1,1 @@
+web/static/icons/icon.svg (master: four off-white lines on #1c1c1e, widths G 16, C 26, E 21, A 16 like ukulele strings), PNGs rendered from it (all within the maskable safe zone), web/src/lib/assets/favicon.svg.

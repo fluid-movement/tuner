@@ -1,0 +1,1 @@
+- [x] Every icon size shows the four strings; the installability test passes
